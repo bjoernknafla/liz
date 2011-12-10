@@ -1,0 +1,27 @@
+//
+//  liz_framework.xcconfig
+//  liz
+//
+//  Created by Björn Knafla on 08.012.2011.
+//  Copyright 2011 Bjoern Knafla. All rights reserved.
+//
+
+#include "liz_common"
+
+GCC_VERSION = com.apple.compilers.llvm.clang.1_0
+GCC_C_LANGUAGE_STANDARD = c99
+// GCC_C_LANGUAGE_STANDARD = c99
+INSTALL_PATH = @executable_path/../Frameworks
+// INSTALL_PATH = $(HOME)/Library/Frameworks
+
+
+GCC_PREPROCESSOR_DEFINITIONS =
+
+HEADER_SEARCH_PATHS = $(LIZ_HEADER_PATHS)
+
+
+ARCHS = $(ARCHS_STANDARD_32_64_BIT)
+
+PRECOMPS_INCLUDE_HEADERS_FROM_BUILT_PRODUCTS_DIR = NO
+GCC_PRECOMPILE_PREFIX_HEADER = NO
+// GCC_PREFIX_HEADER = liz/liz-Prefix.pch

@@ -1,0 +1,25 @@
+//
+//  liz_test.xcconfig
+//  liz
+//
+//  Created by Björn Knafla on 08.012.2011.
+//  Copyright 2011 Bjoern Knafla. All rights reserved.
+//
+
+#include "UnitTest++"
+#include "liz_common"
+
+// GCC_PREPROCESSOR_DEFINITIONS =  
+GCC_VERSION = com.apple.compilers.llvm.clang.1_0
+
+
+HEADER_SEARCH_PATHS = "$(UNITTESTPP_HEADER_PATH)" "LIZ_HEADER_PATHS"
+// $(BT_HEADER_PATHS) "$(UNITTESTPP_HEADER_PATH)"
+LIBRARY_SEARCH_PATHS = $(inherited) "$(UNITTESTPP_LIBRARY_PATH)"
+
+GCC_INLINES_ARE_PRIVATE_EXTERN = NO
+GCC_SYMBOLS_PRIVATE_EXTERN = NO
+GCC_WARN_PEDANTIC = NO
+
+ARCHS = $(ARCHS_STANDARD_32_64_BIT)
+

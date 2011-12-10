@@ -1,0 +1,14 @@
+//
+//  liz_common.xcconfig
+//  liz
+//
+//  Created by Björn Knafla on 08.012.2011.
+//  Copyright 2011 Bjoern Knafla. All rights reserved.
+//
+
+#include "compiler_warnings"
+
+ALWAYS_SEARCH_USER_PATHS = NO
+
+LIZ_HEADER_PATHS = "$(SRCROOT)/../../../src/c/" "$(SRCROOT)/../../../src/cpp/"
+

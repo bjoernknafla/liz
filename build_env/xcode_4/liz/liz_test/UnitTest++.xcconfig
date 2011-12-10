@@ -1,0 +1,14 @@
+
+
+//
+//  UnitTest++.xcconfig
+// liz
+//
+//  Created by Björn Knafla on 08.012.2011.
+//  Copyright 2011 Bjoern Knafla. All rights reserved.
+//
+
+    
+UNITTESTPP_ROOT_PATH = $(UNITTESTPP)
+UNITTESTPP_HEADER_PATH = "$(UNITTESTPP_ROOT_PATH)/"
+UNITTESTPP_LIBRARY_PATH = "$(UNITTESTPP_ROOT_PATH)/lib/win32_gcc_debug/"   
