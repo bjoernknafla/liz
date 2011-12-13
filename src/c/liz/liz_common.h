@@ -61,12 +61,18 @@ extern "C" {
      * fail-argument    - deferred action termination notification from another 
      *                    system.
      * fail-returned    - behavior completed unsuccessfully.
+     *
+     * Cancel state is only used during cancellation handling.
+     * cancel-argument  - behavior should cancel and clean up side effects.
+     * cancel-returned  - must only be returned when called with cancel-
+     *                    argument.
      */
     typedef enum liz_execution_state {
         liz_execution_state_launch = 0,
         liz_execution_state_running,
         liz_execution_state_success,
-        liz_execution_state_fail
+        liz_execution_state_fail,
+        liz_execution_state_cancel
     } liz_execution_state_t;
     
     

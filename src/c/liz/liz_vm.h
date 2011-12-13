@@ -67,6 +67,7 @@
 
 #include <liz/liz_platform_types.h>
 #include <liz/liz_platform_macros.h>
+#include <liz/liz_allocator.h>
 #include <liz/liz_common.h>
 #include <liz/liz_common_internal.h>
 #include <liz/liz_lookaside_stack.h>
@@ -100,9 +101,9 @@ extern "C" {
     typedef enum liz_vm_cmd {
         liz_vm_cmd_invoke_node = 0, /**< Tick a node entered from top. */
         liz_vm_cmd_guard_and_traverse, /**< Guard a decider and traverse up or down. */
-        liz_vm_cleanup_and_actor_update, /**< Cleanup the vm and copy the new states to the actor. */
+        liz_vm_cmd_cleanup_and_actor_update, /**< Cleanup the vm and copy the new states to the actor. */
         liz_vm_cmd_done, /**< Run is done. Do not forget to extract the action requests yourself. */
-        liz_vm_error /**< This must not happen, the behavior tree is malformed. */
+        liz_vm_cmd_error /**< This must not happen, the behavior tree is malformed. */
     } liz_vm_cmd_t;
     
     
@@ -151,6 +152,13 @@ extern "C" {
     
     
     
+    /**
+     *
+     *
+     * When adding rollback markers for immediately cancelable states and 
+     * requestsalso add rollback handling to 
+     * liz_vm_rollback_immediately_cancelable_states_and_requests.
+     */
     typedef struct liz_vm_decider_guard {
         uint16_t shape_atom_index;
         uint16_t end_index;
@@ -176,7 +184,18 @@ extern "C" {
     
     
     
-    struct liz_vm {
+#define LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH liz_lookaside_double_stack_side_low
+#define LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL liz_lookaside_double_stack_side_high
+    
+    
+    
+    /**
+     *
+     *
+     * When adding states and requests to rollback immediately on cancellation 
+     * add associated markers to liz_vm_decider_guard_t.
+     */
+    typedef struct liz_vm {
         liz_int_t shape_atom_index;
         liz_int_t actor_decider_state_index;
         liz_int_t actor_action_state_index;
@@ -200,7 +219,7 @@ extern "C" {
         
         liz_vm_cmd_t cmd;
         liz_execution_state_t execution_state;
-    };
+    } liz_vm_t;
     
     
     
@@ -213,6 +232,17 @@ extern "C" {
         
     } liz_vm_monitor_node_flag_t;
     
+    
+    
+    typedef struct liz_vm_monitor liz_vm_monitor_t;
+    
+    
+    
+    typedef void (*liz_vm_monitor_node_func_t)(liz_vm_monitor_t *monitor,
+                                               liz_vm_t const *vm,
+                                               void const * LIZ_RESTRICT blackboard,
+                                               liz_vm_actor_t const *actor,
+                                               liz_vm_shape_t const *shape);
     
     
     /** 
@@ -234,11 +264,7 @@ extern "C" {
     
     
     
-    typedef void (*liz_vm_monitor_node_func_t)(liz_vm_monitor_t *monitor,
-                                               liz_vm_t const *vm,
-                                               void const * LIZ_RESTRICT blackboard,
-                                               liz_vm_actor_t const *actor,
-                                               liz_vm_shape_t const *shape);
+    
     
     
     
@@ -441,14 +467,26 @@ extern "C" {
     
 #pragma mark Helpers
     
-    
-    
+    /**
+     * Cancels all of the following actions whose shape atom index is inside
+     * the vm's cancellation range:
+     * - the immediate and deferred actions with a running state from the 
+     *   vm's action state buffer,
+     * - all not yet visited immediate and deferred actions with a running or 
+     *   launch state from the actor's action state buffer.
+     *
+     * This is the only place where shape stream traversal jumps back (to cancel
+     * running actions just invoked by a concurrent node).
+     * If jumping back in the stream shows up as a hotspot then rethink 
+     * cancellation handling or store the action shape atoms together with their
+     * action state in the vm.
+     */
     void
-    liz_vm_cancel_actions(liz_vm_t *vm,
-                          void * LIZ_RESTRICT actor_blackboard,
-                          liz_vm_actor_t *actor,
-                          liz_vm_monitor_t *monitor,
-                          liz_vm_shape_t const *shape);
+    liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
+                                                void * LIZ_RESTRICT actor_blackboard,
+                                                liz_vm_actor_t const *actor,
+                                                liz_vm_monitor_t *monitor,
+                                                liz_vm_shape_t const *shape);
     
     
     
@@ -459,6 +497,22 @@ extern "C" {
                         void const * LIZ_RESTRICT blackboard,
                         liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape);
+    
+    
+    
+    LIZ_INLINE static
+    void
+    liz_vm_rollback_immediately_cancelable_states_and_requests(liz_vm_t *vm, 
+                                                               liz_vm_decider_guard_t const *guard)
+    {
+        liz_lookaside_stack_set_count(&vm->decider_state_stack_header, 
+                                      guard->decider_state_rollback_marker);
+        
+        liz_lookaside_double_stack_set_count(&vm->action_request_stack_header, 
+                                             guard->action_launch_request_rollback_marker, 
+                                             LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+    }
+    
     
     
     
@@ -522,10 +576,105 @@ extern "C" {
     liz_vm_decider_guard_t*
     liz_vm_current_top_decider_guard(liz_vm_t *vm)
     {
+        LIZ_ASSERT(!liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header));
+        
         liz_int_t const top_index = liz_lookaside_stack_top_index(&vm->decider_guard_stack_header);
         return &vm->decider_guards[top_index];
     }
 
+    
+    
+    LIZ_INLINE static
+    bool
+    liz_vm_cancellation_range_is_empty(liz_vm_cancellation_range_t const range)
+    {
+        return range.begin_index == range.end_index;
+    }
+    
+    
+    
+    /**
+     * Replaces an empty range or grows a non-empty range if the new indices lie 
+     * outside of the range but never shrinks it.
+     *
+     * new_begin_index must be less or equal to new_end_index, otherwise 
+     * behavior is undefined.
+     */
+    void
+    liz_vm_cancellation_range_adapt(liz_vm_cancellation_range_t *cancellation_range,
+                                    uint16_t const new_begin_index,
+                                    uint16_t const new_end_index);
+    
+    
+    
+    LIZ_INLINE static
+    liz_execution_state_t
+    liz_vm_tick_immediate_action(void * LIZ_RESTRICT actor_blackboard,
+                                 liz_execution_state_t const execution_request,
+                                 liz_shape_atom_t const *shape_atom_stream,
+                                 liz_immediate_action_func_t const *immediate_action_functions,
+                                 liz_int_t const immediate_action_function_count)
+    {
+        LIZ_ASSERT(immediate_action_function_count > shape_atom_stream->immediate_action.function_index);
+        
+        liz_immediate_action_func_t const func = immediate_action_functions[shape_atom_stream->immediate_action.function_index];
+        liz_execution_state_t exec_state = func(actor_blackboard,
+                                                execution_request);
+        LIZ_ASSERT(liz_execution_state_launch != exec_state && "Immediate actions must not return a launch statel, return running instead.");
+        
+        return exec_state;
+    }
+    
+    
+    
+    /**
+     * Call to emit an action launch or cancel request for a deferred action.
+     */
+    liz_execution_state_t
+    liz_vm_launch_or_cancel_deferred_action(liz_vm_action_request_t *action_requests,
+                                            liz_lookaside_double_stack_t *action_request_stack_header,
+                                            liz_execution_state_t const execution_request,
+                                            liz_shape_atom_t const *action_begin_shape_atom,
+                                            liz_int_t const shape_atom_index);
+    
+    
+    
+    void
+    liz_vm_cancel_immediate_or_deferred_action(void * LIZ_RESTRICT actor_blackboard,
+                                               liz_vm_action_request_t *deferred_action_requests,
+                                               liz_lookaside_double_stack_t *deferrec_action_request_stack_header,
+                                               liz_shape_atom_t const *action_begin_shape_atom,
+                                               liz_int_t const shape_atom_index,
+                                               liz_immediate_action_func_t const *immediate_action_functions,
+                                               liz_int_t const immediate_action_function_count);
+    
+    
+    
+    /**
+     * Cancel immediate and deferred actions that returned a running state
+     * during the current update.
+     */
+    void
+    liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
+                                                      void * LIZ_RESTRICT actor_blackboard,
+                                                      liz_vm_monitor_t *monitor,
+                                                      liz_vm_shape_t const *shape);
+    
+    
+    
+    /**
+     * Cancel immediate and deferred action with a running (or launching) state
+     * from the previous update that have not been invoked during the current
+     * update.
+     */
+    void
+    liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
+                                                                    void * LIZ_RESTRICT actor_blackboard,
+                                                                    liz_vm_actor_t const *actor,
+                                                                    liz_vm_monitor_t *monitor,
+                                                                    liz_vm_shape_t const *shape);;
+    
+    
     
     
 #if defined(__cplusplus)

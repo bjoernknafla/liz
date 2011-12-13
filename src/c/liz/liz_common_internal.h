@@ -79,7 +79,8 @@ extern "C" {
             uint32_t action_id;
         } deferred_action_second;
         struct {
-            uint32_t dummy;
+            char padding[3];
+            uint8_t type;
         } persistent_action;
         struct {
             uint16_t end_index;
@@ -119,7 +120,7 @@ extern "C" {
     
     LIZ_INLINE static
     liz_int_t
-    liz_min_int(liz_int_t const lhs, liz_int_t const rhs) 
+    liz_min(liz_int_t const lhs, liz_int_t const rhs) 
     {
         return lhs < rhs ? lhs : rhs;
     }
@@ -128,7 +129,7 @@ extern "C" {
     
     LIZ_INLINE static
     liz_int_t 
-    liz_max_int(liz_int_t const lhs, liz_int_t const rhs) 
+    liz_max(liz_int_t const lhs, liz_int_t const rhs) 
     {
         return lhs > rhs ? lhs : rhs;
     }
