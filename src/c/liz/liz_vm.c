@@ -32,17 +32,65 @@
 #include "liz_vm.h"
 
 #include "liz_assert.h"
+#include "liz_common.h"
 
 
 
-#pragma mark Create or destroy vm
+#pragma mark Create and destroy vm
 
 
 
 size_t
-liz_vm_memory_size(liz_shape_specification_t const spec)
+liz_vm_memory_size_requirement(liz_shape_specification_t const spec)
 {
+    // Size of struct.
+    size_t vm_size = sizeof(liz_vm_t);
     
+    // Size of shape atom indices.
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT, 
+                                            vm_size,
+                                            LIZ_SHAPE_ATOM_INDEX_ALIGNMENT,
+                                            sizeof(uint16_t) * spec.persistent_state_change_capacity);
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_SHAPE_ATOM_INDEX_ALIGNMENT, 
+                                            sizeof(uint16_t) * spec.decider_state_capacity);
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_SHAPE_ATOM_INDEX_ALIGNMENT,
+                                            sizeof(uint16_t) * spec.action_state_capacity);
+    
+    // Size of states.
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_PERSISTENT_STATE_ALIGNMENT, 
+                                            sizeof(liz_persistent_state_t) * spec.persistent_state_change_capacity);
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_DECIDER_STATE_ALIGNMENT,
+                                            sizeof(uint16_t) * spec.decider_state_capacity);
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_ACTION_STATE_ALIGNMENT,
+                                            sizeof(uint8_t) * spec.action_state_capacity);
+    
+    // Size of action requests and guard stack.
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_VM_DECIDER_GUARD_ALIGNMENT,
+                                            sizeof(liz_vm_decider_guard_t) * spec.decider_guard_capacity);
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_VM_ACTION_REQUEST_ALIGNMENT,
+                                            sizeof(liz_vm_action_request_t) * spec.action_request_capacity);
+    
+    // Round up size to enable aligned packing in an array.
+    vm_size = liz_allocation_size_aggregate(LIZ_VM_ALIGNMENT,
+                                            vm_size,
+                                            LIZ_VM_ALIGNMENT,
+                                            0);
+    
+    return vm_size;
 }
 
 
@@ -52,7 +100,58 @@ liz_vm_create(liz_shape_specification_t const spec,
               void * LIZ_RESTRICT allocator_context,
               liz_alloc_func_t alloc_func)
 {
+    size_t const vm_size = liz_vm_memory_size_requirement(spec);
+    liz_vm_t *vm = (liz_vm_t *)alloc_func(allocator_context, vm_size);
     
+    if (!vm) {
+        return NULL;
+    }
+    
+    // Calculate aligned state addresses.
+    char *ptr = (char *)vm + sizeof(liz_vm_t);
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_SHAPE_ATOM_INDEX_ALIGNMENT);
+    uint16_t *persistent_state_change_shape_atom_indices = (uint16_t *)ptr;
+    
+    ptr += sizeof(uint16_t) * spec.persistent_state_change_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_SHAPE_ATOM_INDEX_ALIGNMENT);
+    uint16_t *decider_state_shape_atom_indices = (uint16_t *)ptr;
+    
+    ptr += sizeof(uint16_t) * spec.decider_state_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_SHAPE_ATOM_INDEX_ALIGNMENT);
+    uint16_t *action_state_shape_atom_indices = (uint16_t *)ptr;
+    
+    ptr += sizeof(uint16_t) * spec.action_state_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_PERSISTENT_STATE_ALIGNMENT);
+    liz_persistent_state_t *persistent_state_changes = (liz_persistent_state_t *)ptr;
+    
+    ptr += sizeof(liz_persistent_state_t) * spec.persistent_state_change_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_DECIDER_STATE_ALIGNMENT);
+    uint16_t *decider_states = (uint16_t *)ptr;
+    
+    ptr += sizeof(uint16_t) * spec.decider_state_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_ACTION_STATE_ALIGNMENT);
+    uint8_t *action_states = (uint8_t *)ptr;
+    
+    ptr += sizeof(uint8_t) * spec.action_state_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_VM_DECIDER_GUARD_ALIGNMENT);
+    liz_vm_decider_guard_t *decider_guards = (liz_vm_decider_guard_t *)ptr;
+    
+    ptr += sizeof(liz_vm_decider_guard_t) * spec.decider_guard_capacity;
+    ptr += liz_allocation_alignment_offset(ptr, LIZ_VM_ACTION_REQUEST_ALIGNMENT);
+    liz_vm_action_request_t *action_requests = (liz_vm_action_request_t *)ptr;
+    
+    liz_vm_init(vm,
+                spec,
+                persistent_state_change_shape_atom_indices,
+                decider_state_shape_atom_indices,
+                action_state_shape_atom_indices,
+                persistent_state_changes,
+                decider_states,
+                action_states,
+                decider_guards,
+                action_requests);
+    
+    return vm;
 }
 
 
@@ -62,7 +161,7 @@ liz_vm_destroy(liz_vm_t *vm,
                void * LIZ_RESTRICT allocator_context,
                liz_dealloc_func_t dealloc_func)
 {
-    
+    dealloc_func(allocator_context, vm);
 }
 
 
@@ -75,19 +174,25 @@ bool
 liz_vm_fulfills_shape_specification(liz_vm_t const *vm,
                                     liz_shape_specification_t const spec)
 {
+    bool result = true;
+    result = result && spec.decider_state_capacity <= liz_lookaside_stack_capacity(&vm->decider_state_stack_header);
+    result = result && spec.action_state_capacity <= liz_lookaside_stack_capacity(&vm->action_state_stack_header);
+    result = result && spec.persistent_state_change_capacity <= liz_lookaside_stack_capacity(&vm->persistent_state_change_stack_header);
+    result = result && spec.decider_guard_capacity <= liz_lookaside_stack_capacity(&vm->decider_guard_stack_header);
+    result = result && spec.action_request_capacity <= liz_lookaside_double_stack_capacity(&vm->action_request_stack_header);
     
+    return result;
 }
 
 
 
 void
 liz_vm_update_actor(liz_vm_t *vm,
-                    liz_vm_actor_t *actor,
-                    liz_action_request_buffer_t *external_requests,
                     liz_vm_monitor_t *monitor,
-                    liz_vm_shape_t const *shape,
                     void * LIZ_RESTRICT user_data_lookup_context,
-                    liz_vm_user_data_lookup_func_t user_data_lookup_func)
+                    liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                    liz_vm_actor_t *actor,
+                    liz_vm_shape_t const *shape)
 {
     LIZ_ASSERT(liz_vm_fulfills_shape_specification(vm, shape->spec));
     
@@ -98,56 +203,93 @@ liz_vm_update_actor(liz_vm_t *vm,
     liz_vm_reset(vm, monitor);
     
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
-                                                   actor->user_data);
+                                                   actor->header->user_data);
     
     while (liz_vm_cmd_done != vm->cmd) {
         vm->cmd = liz_vm_step_cmd(vm,
-                                  actor,
-                                  actor_blackboard,
                                   monitor,
+                                  actor_blackboard,
+                                  actor,
                                   shape,
                                   vm->cmd);
     }
+    
+    liz_vm_extract_and_clear_actor_states(vm, actor, shape);
 }
 
 
 
 void
 liz_vm_cancel_actor(liz_vm_t *vm,
-                    liz_vm_actor_t *actor,
-                    liz_action_request_buffer_t *external_requests,
                     liz_vm_monitor_t *monitor,
-                    liz_vm_shape_t const *shape,
                     void * LIZ_RESTRICT user_data_lookup_context,
-                    liz_vm_user_data_lookup_func_t user_data_lookup_func)
+                    liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                    liz_vm_actor_t *actor,
+                    liz_vm_shape_t const *shape)
 {
     LIZ_ASSERT(liz_vm_fulfills_shape_specification(vm, shape->spec));
     
     liz_vm_reset(vm, monitor);
     
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
-                                                   actor->user_data);
+                                                   actor->header->user_data);
     
     vm->cmd = liz_vm_step_cmd(vm,
-                              actor,
-                              actor_blackboard,
                               monitor,
+                              actor_blackboard,
+                              actor,
                               shape,
-                              liz_vm_cmd_cleanup_and_actor_update);
-    
+                              liz_vm_cmd_cleanup);
     LIZ_ASSERT(liz_vm_cmd_done == vm->cmd);
+    
+    liz_vm_extract_and_clear_actor_states(vm, actor, shape);
 }
 
 
 
 void
-liz_vm_extract_action_requests(liz_vm_t *vm,
-                               liz_vm_actor_t *actor,
-                               liz_vm_monitor_t *monitor,
-                               liz_action_request_buffer_t *external_requests)
+liz_vm_extract_and_clear_action_requests(liz_vm_t *vm,
+                                         liz_action_request_t *external_requests,
+                                         liz_int_t const external_request_capacity,
+                                         liz_id_t const actor_id)
 {
+    LIZ_ASSERT(external_request_capacity >= liz_lookaside_double_stack_count_all(&vm->action_request_stack_header));
     
+    liz_int_t external_index = 0;
     
+    // Extract cancellation requests.
+    LIZ_ASSERT(liz_lookaside_double_stack_side_high == LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL
+               && "Invalid assumption that cancellation requests are stored at the high side of the stack.");
+    liz_int_t const cancel_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
+    for (liz_int_t i = liz_lookaside_double_stack_capacity(&vm->action_request_stack_header);
+         i >= cancel_top_index; 
+         --i) {
+
+        external_requests[external_index++] = (liz_action_request_t){
+            actor_id,
+            vm->action_requests[i].action_id,
+            vm->action_requests[i].resource,
+            vm->action_requests[i].shape_item_index,
+            liz_action_request_type_cancel
+        };
+    }
+    
+    // Extract launch requests.
+    LIZ_ASSERT(liz_lookaside_double_stack_side_low == LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH
+               && "Invalid assumption that cancellation requests are stored at the low side of the stack.");
+    liz_int_t const launch_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+    for (liz_int_t i = 0; i <= launch_top_index; ++i) {
+        
+        external_requests[external_index++] = (liz_action_request_t){
+            actor_id,
+            vm->action_requests[i].action_id,
+            vm->action_requests[i].resource,
+            vm->action_requests[i].shape_item_index,
+            liz_action_request_type_launch
+        };
+    }
+    
+    liz_lookaside_double_stack_clear(&vm->action_request_stack_header);
 }
 
 
@@ -183,9 +325,9 @@ liz_vm_reset(liz_vm_t *vm,
 
 liz_vm_cmd_t
 liz_vm_step_cmd(liz_vm_t *vm,
-                liz_vm_actor_t *actor,
-                void * LIZ_RESTRICT actor_blackboard,
                 liz_vm_monitor_t *monitor,
+                void * LIZ_RESTRICT actor_blackboard,
+                liz_vm_actor_t const *actor,
                 liz_vm_shape_t const *shape,
                 liz_vm_cmd_t const cmd)
 {
@@ -194,27 +336,26 @@ liz_vm_step_cmd(liz_vm_t *vm,
     switch (cmd) {
         case liz_vm_cmd_invoke_node:
             next_cmd = liz_vm_step_invoke_node(vm,
+                                               monitor,
                                                actor_blackboard,
                                                actor,
-                                               monitor,
                                                shape);
             break;
             
-        case liz_vm_cmd_guard_and_traverse:
-            next_cmd = liz_vm_step_guard_and_traverse(vm,
-                                                      actor_blackboard,
-                                                      actor,
-                                                      monitor,
-                                                      shape);
+        case liz_vm_cmd_guard_decider:
+            next_cmd = liz_vm_step_guard_decider(vm,
+                                                 monitor,
+                                                 actor_blackboard,
+                                                 actor,
+                                                 shape);
             break;
             
-        case liz_vm_cmd_cleanup_and_actor_update:
-            next_cmd = liz_vm_step_cleanup_and_actor_update(vm,
-                                                            actor_blackboard,
-                                                            actor,
-                                                            monitor,
-                                                            shape);
-            break;
+        case liz_vm_cmd_cleanup:
+            liz_vm_step_cleanup(vm,
+                                monitor,
+                                actor_blackboard,
+                                actor,
+                                shape);
             
         case liz_vm_cmd_done:
             // Nothing to do. Call liz_vm_extract_action_requests yourself.
@@ -242,9 +383,9 @@ liz_vm_step_cmd(liz_vm_t *vm,
 
 liz_vm_cmd_t
 liz_vm_step_invoke_node(liz_vm_t *vm,
-                        void * LIZ_RESTRICT actor_blackboard,
-                        liz_vm_actor_t *actor,
                         liz_vm_monitor_t *monitor,
+                        void * LIZ_RESTRICT actor_blackboard,
+                        liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape)
 {
     LIZ_ASSERT(shape->spec.shape_atom_count > vm->shape_atom_index);
@@ -259,7 +400,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
     
     liz_vm_cmd_t next_cmd = liz_vm_cmd_error;
     
-    switch (liz_vm_current_node_type(vm, shape)) {
+    switch (shape->atoms[vm->shape_atom_index].type_mask.type) {
         case liz_node_type_immediate_action:
             liz_vm_invoke_immediate_action(vm,
                                            actor_blackboard,
@@ -267,7 +408,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
                                            shape);
             
             // Traverse up to decider, alas its associated guard.
-            next_cmd = liz_vm_cmd_guard_and_traverse;
+            next_cmd = liz_vm_cmd_guard_decider;
             traversal_direction = liz_vm_monitor_node_flag_leave_to_top;
             
             break;
@@ -278,7 +419,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
                                           shape);
             
             // Traverse up to decider, alas its associated guard.
-            next_cmd = liz_vm_cmd_guard_and_traverse;
+            next_cmd = liz_vm_cmd_guard_decider;
             traversal_direction = liz_vm_monitor_node_flag_leave_to_top;
             
             break;
@@ -289,7 +430,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
                                             shape);
             
             // Traverse up to decider, alas its associated guard.
-            next_cmd = liz_vm_cmd_guard_and_traverse;
+            next_cmd = liz_vm_cmd_guard_decider;
             traversal_direction = liz_vm_monitor_node_flag_leave_to_top;
             
             break;
@@ -326,16 +467,16 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
 
 
 liz_vm_cmd_t
-liz_vm_step_guard_and_traverse(liz_vm_t *vm,
-                               void * LIZ_RESTRICT actor_blackboard,
-                               liz_vm_actor_t *actor,
-                               liz_vm_monitor_t *monitor,
-                               liz_vm_shape_t const *shape)
+liz_vm_step_guard_decider(liz_vm_t *vm,
+                          liz_vm_monitor_t *monitor,
+                          void * LIZ_RESTRICT actor_blackboard,
+                          liz_vm_actor_t const *actor,
+                          liz_vm_shape_t const *shape)
 {
     // An empty guard stack means that the root node has been left to its top,
     // alas the update is done.
     if (liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header)) {
-        return liz_vm_cmd_cleanup_and_actor_update;
+        return liz_vm_cmd_cleanup;
     }
     
     // Process decider node's child execution state, alas guard how to react.
@@ -376,17 +517,17 @@ liz_vm_step_guard_and_traverse(liz_vm_t *vm,
         // Leave the decider node, alas the decider guard representing it and
         // prepare the vm for guarding the parent decider.
         liz_lookaside_stack_pop(&vm->decider_guard_stack_header);
-        next_cmd = liz_vm_cmd_guard_and_traverse;
+        next_cmd = liz_vm_cmd_guard_decider;
         traversal_direction = liz_vm_monitor_node_flag_leave_to_top;
         
     } else { 
         // When switching from traversing up to traversing down again, first
-        // Cancel actions in marked cancellation range so new states won't mix
+        // cancel actions in marked cancellation range so new states won't mix
         // with abandoned ones on the following node invocation.
         liz_vm_cancel_actions_in_cancellation_range(vm,
+                                                    monitor,
                                                     actor_blackboard,
                                                     actor,
-                                                    monitor,
                                                     shape);
         
         next_cmd = liz_vm_cmd_invoke_node;
@@ -407,13 +548,99 @@ liz_vm_step_guard_and_traverse(liz_vm_t *vm,
 
 
 liz_vm_cmd_t
-liz_vm_step_cleanup_and_actor_update(liz_vm_t *vm,
-                                     void * LIZ_RESTRICT actor_blackboard,
-                                     liz_vm_actor_t *actor,
-                                     liz_vm_monitor_t *monitor,
-                                     liz_vm_shape_t const *shape)
+liz_vm_step_cleanup(liz_vm_t *vm,
+                    liz_vm_monitor_t *monitor,
+                    void * LIZ_RESTRICT actor_blackboard,
+                    liz_vm_actor_t const *actor,
+                    liz_vm_shape_t const *shape)
 {
+    LIZ_ASSERT(liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header) 
+               && "Decider guard stack must be empty before cleanup.");
     
+    // If the last traversal steps were all up and then reached the root
+    // before going down again, then there might be running actions to cancel.
+    liz_vm_cancel_actions_in_cancellation_range(vm,
+                                                monitor,
+                                                actor_blackboard,
+                                                actor,
+                                                shape);
+    
+    // Reorder vm decider states.
+    LIZ_ASSERT(0 == (((uintptr_t)vm->decider_guards) & (LIZ_VM_DECIDER_GUARD_ALIGNMENT - 1)) 
+               && "Invalid assumption that decider guard stack is 16bit aligned.");
+    LIZ_ASSERT(sizeof(*(vm->decider_guards)) >= (sizeof(*(vm->decider_states)) + sizeof(*(vm->decider_state_shape_atom_indices))) 
+               && "Stack elements too small to store a decider state and its shape atom index.");
+    liz_sort_values_for_keys_from_post_order_traversal(vm->decider_states,
+                                                       vm->decider_state_shape_atom_indices,
+                                                       sizeof(*(vm->decider_states)),
+                                                       liz_lookaside_stack_count(&vm->decider_state_stack_header),
+                                                       vm->decider_guards + sizeof(*(vm->decider_states)) * liz_lookaside_stack_count(&vm->decider_state_stack_header),
+                                                       (uint16_t *)(vm->decider_guards),
+                                                       liz_lookaside_stack_capacity(&vm->decider_guard_stack_header));
+    
+    // Reorder vm persistent state changes, establish the correct helper stack 
+    // alignment.
+    LIZ_ASSERT(0 == (((uintptr_t)vm->decider_guards) & (LIZ_VM_DECIDER_GUARD_ALIGNMENT - 1))
+               && "Invalid assumption that decider guard stack is 16bit aligned.");
+    LIZ_ASSERT(sizeof(*(vm->decider_guards)) >= (sizeof(*(vm->persistent_state_changes)) + sizeof(*(shape->persistent_state_shape_atom_indices)) + (LIZ_PERSISTENT_STATE_ALIGNMENT - LIZ_VM_DECIDER_GUARD_ALIGNMENT)) 
+               && "Stack elements too small to store a persistent state change and its shape atom index.");
+    
+    char *aligned_persistent_state_stack = (char *)vm->decider_guards + sizeof(*(shape->persistent_state_shape_atom_indices)) * liz_lookaside_stack_capacity(&vm->decider_guard_stack_header);
+    aligned_persistent_state_stack += liz_allocation_alignment_offset(aligned_persistent_state_stack, LIZ_PERSISTENT_STATE_ALIGNMENT);
+    
+    liz_sort_values_for_keys_from_post_order_traversal(vm->persistent_state_changes,
+                                                       vm->persistent_state_change_shape_atom_indices, 
+                                                       sizeof(*(vm->persistent_state_changes)),
+                                                       liz_lookaside_stack_count(&vm->persistent_state_change_stack_header),
+                                                       aligned_persistent_state_stack,
+                                                       (uint16_t *)(vm->decider_guards),
+                                                       liz_lookaside_stack_capacity(&vm->decider_guard_stack_header));
+    
+    // That's it. Action states and action launch requests should be in the
+    // correct order while action cancel requests should be in the reversed 
+    // correct order which is taken into account when extracting the requests.
+}
+
+
+
+
+void
+liz_vm_extract_and_clear_actor_states(liz_vm_t *vm,
+                                      liz_vm_actor_t *actor,
+                                      liz_vm_shape_t const *shape)
+{
+    LIZ_ASSERT(liz_vm_cmd_done == vm->cmd
+               && "Vm update must have been cleaned up and done before transmitting states to actor.");
+    
+    actor->header->decider_state_count = liz_lookaside_stack_count(&vm->decider_guard_stack_header);
+    actor->header->action_state_count = liz_lookaside_stack_count(&vm->action_state_stack_header);
+    
+    liz_actor_header_t const actor_header = *(actor->header);
+    
+    liz_memcpy(actor->decider_states, 
+               vm->decider_states,
+               sizeof(*(actor->decider_states)) * actor_header.decider_state_count);
+    liz_memcpy(actor->decider_state_shape_atom_indices,
+               vm->decider_state_shape_atom_indices, 
+               sizeof(*(actor->decider_state_shape_atom_indices)) * actor_header.decider_state_count);
+    
+    liz_memcpy(actor->action_states,
+               vm->action_states,
+               sizeof(*(actor->action_states)) * actor_header.action_state_count);
+    liz_memcpy(actor->action_state_shape_atom_indices, 
+               vm->action_state_shape_atom_indices,
+               sizeof(*(actor->action_state_shape_atom_indices)) * actor_header.action_state_count);
+    
+    liz_apply_persistent_state_changes(actor->persistent_states,
+                                       shape->persistent_state_shape_atom_indices,
+                                       shape->spec.persistent_state_count,
+                                       vm->persistent_state_changes,
+                                       vm->persistent_state_change_shape_atom_indices,
+                                       liz_lookaside_stack_count(&vm->persistent_state_change_stack_header));
+    
+    liz_lookaside_stack_clear(&vm->persistent_state_change_stack_header);
+    liz_lookaside_stack_clear(&vm->decider_state_stack_header);
+    liz_lookaside_stack_clear(&vm->action_state_stack_header);
 }
 
 
@@ -430,17 +657,14 @@ liz_vm_invoke_immediate_action(liz_vm_t *vm,
                                liz_vm_actor_t const *actor,
                                liz_vm_shape_t const *shape)
 {
-    liz_shape_atom_t const *node = &shape->atoms[vm->shape_atom_index];
-    
     // Determine the action state.
     liz_execution_state_t exec_state = liz_execution_state_launch;
-    if (liz_find_key(&vm->actor_action_state_index,
+    if (liz_seek_key(&vm->actor_action_state_index,
                      vm->shape_atom_index,
-                     liz_vm_actor_action_state_shape_atom_indices(actor),
+                     actor->action_state_shape_atom_indices,
                      shape->spec.shape_atom_count)) {
         
-        uint8_t const *actor_action_states = liz_vm_actor_action_states(actor); 
-        exec_state = (liz_execution_state_t)actor_action_states[vm->actor_action_state_index];
+        exec_state = (liz_execution_state_t)actor->action_states[vm->actor_action_state_index];
         
         // If action fails then cancellation shouldn't try to cancel it.
         vm->actor_action_state_index += 1u;
@@ -449,7 +673,7 @@ liz_vm_invoke_immediate_action(liz_vm_t *vm,
     // Call the immediate action.
     exec_state = liz_vm_tick_immediate_action(actor_blackboard,
                                               exec_state,
-                                              node,
+                                              &shape->atoms[vm->shape_atom_index],
                                               shape->immediate_action_functions,
                                               shape->spec.immediate_action_function_count);
     LIZ_ASSERT(liz_execution_state_cancel != exec_state && "Immediate actions must not return liz_execution_state_cancel when not called with it.");
@@ -464,7 +688,7 @@ liz_vm_invoke_immediate_action(liz_vm_t *vm,
     }
     
     vm->execution_state = exec_state;
-    vm->cmd = liz_vm_cmd_guard_and_traverse;
+    vm->cmd = liz_vm_cmd_guard_decider;
     vm->shape_atom_index += 1u;
 }
 
@@ -533,7 +757,7 @@ liz_vm_invoke_common_decider(liz_vm_t *vm,
 
 
 
-#pragma mark Re-enter decider from bottom
+#pragma mark Re-enter deciders from bottom
 
 
 
@@ -665,10 +889,45 @@ liz_vm_guard_dynamic_priority_decider(liz_vm_t *vm)
 
 
 void
+liz_vm_init(liz_vm_t *vm,
+            liz_shape_specification_t const spec,
+            uint16_t *persistent_state_change_shape_atom_indices,
+            uint16_t *decider_state_shape_atom_indices,
+            uint16_t *action_state_shape_atom_indices,
+            liz_persistent_state_t *persistent_state_changes,
+            uint16_t *decider_states,
+            uint8_t *action_states,
+            liz_vm_decider_guard_t *decider_guards,
+            liz_vm_action_request_t *action_requests)
+{
+    vm->persistent_state_change_shape_atom_indices = persistent_state_change_shape_atom_indices;
+    vm->decider_state_shape_atom_indices = decider_state_shape_atom_indices;
+    vm->action_state_shape_atom_indices = action_state_shape_atom_indices;
+    
+    vm->persistent_state_changes = persistent_state_changes;
+    vm->decider_states = decider_states;
+    vm->action_states = action_states;
+    
+    vm->decider_guards = decider_guards;
+    vm->action_requests = action_requests;
+    
+    vm->persistent_state_change_stack_header = liz_lookaside_stack_make(spec.persistent_state_change_capacity, 0);
+    vm->decider_state_stack_header = liz_lookaside_stack_make(spec.decider_state_capacity, 0);
+    vm->action_state_stack_header = liz_lookaside_stack_make(spec.action_state_capacity, 0);
+    
+    vm->decider_guard_stack_header = liz_lookaside_stack_make(spec.decider_guard_capacity, 0);
+    vm->action_request_stack_header = liz_lookaside_double_stack_make(spec.action_request_capacity, 0, 0);
+    
+    liz_vm_reset(vm, NULL);
+}
+
+
+
+void
 liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
+                                            liz_vm_monitor_t *monitor,
                                             void * LIZ_RESTRICT actor_blackboard,
                                             liz_vm_actor_t const *actor,
-                                            liz_vm_monitor_t *monitor,
                                             liz_vm_shape_t const *shape)
 {
     if (liz_vm_cancellation_range_is_empty(vm->cancellation_range)) {
@@ -683,9 +942,9 @@ liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
     // Running this after the jump back to have linear shape atom stream 
     // iteration during cancellation.
     liz_vm_cancel_launched_and_running_actions_from_previous_update(vm,
+                                                                    monitor,
                                                                     actor_blackboard,
                                                                     actor,
-                                                                    monitor,
                                                                     shape);
     
     // Clear alas empty the cancellation range.
@@ -760,7 +1019,7 @@ liz_vm_launch_or_cancel_deferred_action(liz_vm_action_request_t *action_requests
                                                                      launch_or_cancel_side);
     action_requests[top_index] = (liz_vm_action_request_t){
         second_atom->deferred_action_second.action_id,
-        action_begin_shape_atom->deferred_action_first.resource,
+        action_begin_shape_atom->deferred_action_first.resource_id,
         shape_atom_index
     };
     
@@ -815,15 +1074,15 @@ liz_vm_cancel_immediate_or_deferred_action(void * LIZ_RESTRICT actor_blackboard,
 
 void
 liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
-                                                  void * LIZ_RESTRICT actor_blackboard,
                                                   liz_vm_monitor_t *monitor,
+                                                  void * LIZ_RESTRICT actor_blackboard,
                                                   liz_vm_shape_t const *shape)
 {
     liz_vm_cancellation_range_t const range = vm->cancellation_range;
     liz_int_t first_action_index = 0;
     
     // If this shows up as a hotspot implement and test a backward key search.
-    (void)liz_find_key(&first_action_index,
+    (void)liz_seek_key(&first_action_index,
                        range.begin_index,
                        vm->action_state_shape_atom_indices ,
                        liz_lookaside_stack_count(&vm->action_state_stack_header));
@@ -862,29 +1121,27 @@ liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
 
 void
 liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
+                                                                liz_vm_monitor_t *monitor,
                                                                 void * LIZ_RESTRICT actor_blackboard,
                                                                 liz_vm_actor_t const *actor,
-                                                                liz_vm_monitor_t *monitor,
                                                                 liz_vm_shape_t const *shape)
 {
     liz_vm_cancellation_range_t const range = vm->cancellation_range;
-    uint16_t const *actor_action_state_shape_atom_indices = liz_vm_actor_action_state_shape_atom_indices(actor);
-    
     liz_int_t actor_action_index = vm->actor_action_state_index;
-    (void)liz_find_key(&actor_action_index, 
+    liz_int_t const actor_action_state_count = actor->header->action_state_count;
+    (void)liz_seek_key(&actor_action_index, 
                        range.begin_index,
-                       actor_action_state_shape_atom_indices, 
-                       actor->action_state_count);
+                       actor->action_state_shape_atom_indices, 
+                       actor_action_state_count);
     
-    for (; actor_action_index < actor->action_state_count; ++actor_action_index) {
+    for (; actor_action_index < actor_action_state_count; ++actor_action_index) {
         
-        liz_int_t const shape_atom_index = actor_action_state_shape_atom_indices[actor_action_index];
+        liz_int_t const shape_atom_index = actor->action_state_shape_atom_indices[actor_action_index];
         if (range.end_index <= shape_atom_index) {
             break;
         }
         
-        uint8_t const *actor_action_states = liz_vm_actor_action_states(actor);
-        liz_execution_state_t const action_state = (liz_execution_state_t)(actor_action_states[actor_action_index]);
+        liz_execution_state_t const action_state = (liz_execution_state_t)(actor->action_states[actor_action_index]);
         if (liz_execution_state_launch != action_state
             && liz_execution_state_running != action_state) {
             // Only cancel yet not visited launched or running actions.

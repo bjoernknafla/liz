@@ -45,8 +45,17 @@
 #if defined(__cplusplus)
 extern "C" {
 #endif
+  
+    
+#define LIZ_SHAPE_ATOM_INDEX_ALIGNMENT sizeof(uint16_t)
+#define LIZ_DECIDER_STATE_ALIGNMENT sizeof(uint16_t)
+#define LIZ_ACTION_STATE_ALIGNMENT sizeof(uint8_t)
     
     
+    
+    /**
+     * Behavior tree node types.
+     */
     typedef enum liz_node_type {
         liz_node_type_immediate_action = 0,
         liz_node_type_deferred_action,
@@ -57,64 +66,109 @@ extern "C" {
     } liz_node_type_t;
     
     
-    
+    /**
+     * Liz flattens the static structure or shape of behavior trees via a 
+     * pre-order traversal into a stream of liz_shape_atom elements.
+     *
+     * Due to the flattening a sub-behavior is represented by a sub-stream alas 
+     * a contiguous range of shape atoms inside the shape stream.
+     *
+     * A behavior tree node might be represented by one or multiple shape atoms.
+     *
+     * Most nodes are represented by a fixed number of atoms but it is possible 
+     * that the number of atoms needed to represent a node is dependent upon the
+     * number of its sub-behaviors, e.g., a probability decider encodes its
+     * type and the offset to its sub-stream end in one atom, the next atom 
+     * hold the number of direct children and the offset to the first child, 
+     * then the probability ranges is stored for each child, followed by 
+     * atoms that hold the offsets for two children.
+     */
     typedef union liz_shape_atom {
         uint32_t size_and_alignment_dummy;
         struct {
-            uint16_t dummy;
-            uint8_t dymmy;
             uint8_t type;
+            uint8_t padding_dummy;
+            uint16_t content_dummy;
         } type_mask;
         struct {
-            uint16_t function_index;
-            uint8_t padding;
             uint8_t type;
+            uint8_t padding;
+            uint16_t function_index;
         } immediate_action;
         struct {
-            uint16_t resource;
-            uint8_t padding;
             uint8_t type;
-        } deferred_action_first;
+            uint8_t padding;
+            uint16_t resource_id;
+        } deferred_action_first; // Followed by a deferred_action_second atom.
         struct {
             uint32_t action_id;
         } deferred_action_second;
         struct {
-            char padding[3];
             uint8_t type;
+            char padding[3];
         } persistent_action;
         struct {
-            uint16_t end_index;
-            uint8_t padding;
             uint8_t type;
-        } common_decider; /* Used by sequence, priority, concurrent decider. */
-        struct {
-            uint16_t end_index;
             uint8_t padding;
-            uint8_t type;
-        } probability_decider_header_first;
+            uint16_t end_offset;
+        } common_decider; // Used by sequence, priority, concurrent decider.
         struct {
-            uint16_t direct_child_count;
-            uint16_t padding;
-        } probability_decider_header_second;
+            uint8_t type;
+            uint8_t padding;
+            uint16_t end_offset;
+        } probability_decider_header_first; // Followed by probability_decider_header_second
+        struct {
+            uint16_t child_count;
+            uint16_t first_child_end_offset;
+        } probability_decider_header_second; // Followed by child_count x probability_decider_child_probability and (child_count / 2) x probability_decider_child_offsets
         struct {
             float probability;
         } probability_decider_child_probability;
         struct {
-            uint16_t shape_atom_index;
-            uint16_t padding;
-        } probability_decider_child_index;
+            uint16_t end_offset0;
+            uint16_t end_offset1;
+        } probability_decider_child_offsets;
         
     } liz_shape_atom_t;
+
     
+    
+    typedef struct liz_actor_clip {
+        size_t memory_size;
+        uintptr_t memory;
+    } liz_actor_clip_t;
+    
+    
+    
+    typedef struct liz_actor_clip_header {
+        uintptr_t user_data;
+        size_t capacity;
+        size_t count;
+        size_t actor_size;
+        liz_id_t clip_id;
+        liz_id_t shape_id;
+    } liz_actor_clip_header_t;
+
+    
+    
+    typedef struct liz_actor_header {
+        uintptr_t user_data;
+        liz_id_t actor_id;
+        uint16_t decider_state_count;
+        uint16_t action_state_count;
+    } liz_actor_header_t;
+    
+    
+
+    // Assumed minimal alignment in bytes.
+#define LIZ_PERSISTENT_STATE_ALIGNMENT 2
+  
     
     
     typedef union liz_persistent_state {
-        
         uint64_t size_and_alignment_dummy;
         uint8_t persistent_action_state;
-        
     } liz_persistent_state_t;
-    
     
     
     
@@ -141,6 +195,16 @@ extern "C" {
                                       liz_shape_specification_t rhs);
     
     
+    
+    void
+    liz_apply_persistent_state_changes(liz_persistent_state_t * LIZ_RESTRICT persistent_states,
+                                       uint16_t *  LIZ_RESTRICT  persistent_state_shape_atom_indices,
+                                       liz_int_t persistent_state_count,
+                                       liz_persistent_state_t const * LIZ_RESTRICT persistent_state_changes,
+                                       uint16_t const * LIZ_RESTRICT persistent_state_change_shape_atom_indices,
+                                       liz_int_t persistent_state_change_count);
+    
+    
     /**
      * Copies the entries of unordered states and unordered shape atom indices
      * sorted for atom index into the respective destination states and 
@@ -154,12 +218,34 @@ extern "C" {
      *
      * The arrays must not overlap, otherwise behavior is undefined.
      */
+    /* Replaced by the more generic liz_sort_values_for_keys_from_post_order_traversal
     void
-    liz_decider_states_sort(uint16_t * LIZ_RESTRICT destination_states,
-                            uint16_t * LIZ_RESTRICT destination_shape_atom_indices,
-                            uint16_t const * LIZ_RESTRICT unordered_states,
-                            uint16_t const * LIZ_RESTRICT unordered_shape_atom_indices,
-                            liz_int_t count);
+    liz_sort_decider_states_for_indices(uint16_t * LIZ_RESTRICT destination_states,
+                                        uint16_t * LIZ_RESTRICT destination_shape_atom_indices,
+                                        uint16_t const * LIZ_RESTRICT unordered_states,
+                                        uint16_t const * LIZ_RESTRICT unordered_shape_atom_indices,
+                                        liz_int_t count);
+    */
+    
+    
+    /**
+     * Reorders keys and their associated values which are in a pre-order 
+     * traversal order according to increasing keys.
+     *
+     * stack_capacity must be at least as large as the tree whose traversal
+     * generated the key and value sequence.
+     * value_reoder_stack must be correctly aligned to store values, otherwise
+     * behavios is undefined.
+     */
+    void
+    liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
+                                                       uint16_t * LIZ_RESTRICT keys,
+                                                       size_t const value_size_in_bytes,
+                                                       liz_int_t const key_value_count,
+                                                       void * LIZ_RESTRICT value_reorder_stack,
+                                                       uint16_t * LIZ_RESTRICT key_reorder_stack,
+                                                       liz_int_t const stack_capacity);
+    
     
     
     /**
@@ -175,7 +261,7 @@ extern "C" {
      * greater key or to key_count if no greater key than key_to_find exists.
      */
     bool
-    liz_find_key(liz_int_t *cursor,
+    liz_seek_key(liz_int_t *cursor,
                  uint16_t const key_to_find,
                  uint16_t const *keys,
                  uint16_t const key_count);

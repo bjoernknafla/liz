@@ -84,47 +84,45 @@ extern "C" {
 #if defined(LIZ_VM_MONITOR_ENABLE)
 #   define LIZ_VM_MONITOR_NODE(monitor, mask, vm, actor_blackboard, actor, shape) liz_vm_monitor_node(monitor, mask, vm, actor_blackboard, actor, shape);
 #else
-#   define LIZ_VM_MONITOR_NODE(monitor, mask, vm, actor_blackboard, actor, shape) /* Nothing to do. */
+#   define LIZ_VM_MONITOR_NODE(monitor, mask, vm, actor_blackboard, actor, shape) do {(void)monitor; (void)mask; (void)vm; (void)actor_blackboard; (void)actor; (void)shape; } while(0)
 #endif
     
     
+    
     /** 
-     *
-     *
-     * TODO: @todo Decide if to add a start command that checks if the shape
-     *             has a node to invoke.
-     *
-     * TODO: @todo Profile if it makes sense to put invoke behind the guard and
-     *             traverse command because they happen more frequently during
-     *             ascending through the tree.
+     * Vm commands representing a traversal step into a node, up or down the 
+     * behavior tree, and the final vm cleanup.
      */
     typedef enum liz_vm_cmd {
         liz_vm_cmd_invoke_node = 0, /**< Tick a node entered from top. */
-        liz_vm_cmd_guard_and_traverse, /**< Guard a decider and traverse up or down. */
-        liz_vm_cmd_cleanup_and_actor_update, /**< Cleanup the vm and copy the new states to the actor. */
+        liz_vm_cmd_guard_decider, /**< Guard a decider and traverse up or down. */
+        liz_vm_cmd_cleanup, /**< Cancel if necessart and sort vm states for extraction. */
         liz_vm_cmd_done, /**< Run is done. Do not forget to extract the action requests yourself. */
         liz_vm_cmd_error /**< This must not happen, the behavior tree is malformed. */
     } liz_vm_cmd_t;
     
     
     
+    /**
+     * Provides direct access to actor data that might be stored in a data blob.
+     */
     typedef struct liz_vm_actor {
-        uintptr_t user_data;
-        liz_id_t actor_id;
+        liz_actor_header_t *header;
         
-        /* Capacities are specified in the associated shape. */
-        uint16_t decider_state_count;
-        uint16_t action_state_count;
+        liz_persistent_state_t *persistent_states;
         
-        uintptr_t persistent_states_offset;
-        uintptr_t decider_state_shape_atom_indices_offset;
-        uintptr_t decider_states_offset;
-        uintptr_t action_state_shape_atom_indices_offset;
-        uintptr_t action_states_offset;
+        uint16_t *decider_state_shape_atom_indices;
+        uint16_t *decider_states;
+        
+        uint16_t *action_state_shape_atom_indices;
+        uint8_t *action_states;
     } liz_vm_actor_t;
     
     
     
+    /**
+     * Provides direct access to shape data that might be stored in a data blob.
+     */
     typedef struct liz_vm_shape {
         liz_shape_atom_t *atoms;
         uint16_t *persistent_state_shape_atom_indices;
@@ -137,7 +135,17 @@ extern "C" {
     
     
     /**
+     * Assumed minimal alignment in bytes.
+     */
+#define LIZ_VM_ACTION_REQUEST_ALIGNMENT sizeof(uint32_t)
+    
+    
+    
+    /**
+     * Action requests generated during an actor update by a vm.
      *
+     * As a vm works on a single actor during an update it saves memory by not
+     * storing the actor's id.
      *
      * TODO: @todo Decide if to use liz_action_request inside the vm instead to
      *             cut down type counts and to simplify request copying which
@@ -153,7 +161,21 @@ extern "C" {
     
     
     /**
+     * Assumed minimal alignment in bytes.
+     */
+#define LIZ_VM_DECIDER_GUARD_ALIGNMENT sizeof(uint16_t)
+    
+    
+    
+    /**
+     * On entering a decider node from above the vm pushes a guard onto a stack
+     * to keep track of it's traversal location in the behavior tree - the guard
+     * is interpreted when traversal returns from its child nodes to handle the
+     * original nodes traversal semantics.
      *
+     * A guard stack is used to minimize the necessity to jump back in the 
+     * shape atom stream to know the type of a node and to note a decider's 
+     * state based on the returned execution state of its children.
      *
      * When adding rollback markers for immediately cancelable states and 
      * requestsalso add rollback handling to 
@@ -177,6 +199,10 @@ extern "C" {
     
     
     
+    /**
+     * Range of shape stream indices which might contain running actions to
+     * cancel.
+     */
     typedef struct liz_vm_cancellation_range {
         uint16_t begin_index;
         uint16_t end_index;
@@ -187,7 +213,11 @@ extern "C" {
 #define LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH liz_lookaside_double_stack_side_low
 #define LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL liz_lookaside_double_stack_side_high
     
-    
+    /**
+     * Assumed minimal vm alignment based on alignment of first field on 32bit
+     * platforms.
+     */
+#define LIZ_VM_ALIGNMENT sizeof(liz_int_t)
     
     /**
      *
@@ -201,19 +231,23 @@ extern "C" {
         liz_int_t actor_action_state_index;
         liz_int_t actor_persistent_state_index;
         
+        uint16_t *persistent_state_change_shape_atom_indices;
         uint16_t *decider_state_shape_atom_indices;
         uint16_t *action_state_shape_atom_indices;
         
+        liz_persistent_state_t *persistent_state_changes;
         uint16_t *decider_states;
         uint8_t *action_states;
         
-        liz_vm_action_request_t *action_requests;
         liz_vm_decider_guard_t *decider_guards;
+        liz_vm_action_request_t *action_requests;
         
+        liz_lookaside_stack_t persistent_state_change_stack_header;
         liz_lookaside_stack_t decider_state_stack_header;
         liz_lookaside_stack_t action_state_stack_header;
-        liz_lookaside_double_stack_t action_request_stack_header;
+        
         liz_lookaside_stack_t decider_guard_stack_header;
+        liz_lookaside_double_stack_t action_request_stack_header;
         
         liz_vm_cancellation_range_t cancellation_range;
         
@@ -264,27 +298,33 @@ extern "C" {
     
     
     
-    
-    
-    
-    
+    /**
+     * Users can store data in an actor which is looked up via an also user
+     * provided function at the beginning of an actor update by a vm.
+     */
     typedef void* (*liz_vm_user_data_lookup_func_t)(void *context, 
                                                     uintptr_t user_data);
     
     
     
-#pragma mark Create or destroy vm
+#pragma mark Create and destroy vm
     
     
-    
+    /**
+     * Returns the memory size in bytes necessary to store a vm capable of
+     * working on actors adhering to the shape specification spec.
+     */
     size_t
-    liz_vm_memory_size(liz_shape_specification_t spec);
+    liz_vm_memory_size_requirement(liz_shape_specification_t spec);
+    
     
     
     liz_vm_t*
     liz_vm_create(liz_shape_specification_t spec,
                   void * LIZ_RESTRICT allocator_context,
                   liz_alloc_func_t alloc_func);
+    
+    
     
     void
     liz_vm_destroy(liz_vm_t *vm,
@@ -313,12 +353,11 @@ extern "C" {
      */
     void
     liz_vm_update_actor(liz_vm_t *vm,
-                        liz_vm_actor_t *actor,
-                        liz_action_request_buffer_t *external_requests,
                         liz_vm_monitor_t *monitor,
-                        liz_vm_shape_t const *shape,
                         void * LIZ_RESTRICT user_data_lookup_context,
-                        liz_vm_user_data_lookup_func_t user_data_lookup_func);
+                        liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                        liz_vm_actor_t *actor,
+                        liz_vm_shape_t const *shape);
     
     
     /**
@@ -330,23 +369,24 @@ extern "C" {
      */
     void
     liz_vm_cancel_actor(liz_vm_t *vm,
-                        liz_vm_actor_t *actor,
-                        liz_action_request_buffer_t *external_requests,
                         liz_vm_monitor_t *monitor,
-                        liz_vm_shape_t const *shape,
                         void * LIZ_RESTRICT user_data_lookup_context,
-                        liz_vm_user_data_lookup_func_t user_data_lookup_func);
+                        liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                        liz_vm_actor_t *actor,
+                        liz_vm_shape_t const *shape);
     
     
     /**
      * Copies the action launch and cancel requests of the last update to
      * external_requests.
+     *
+     * TODO: @todo Change function to allow chunk-wise extraction of requests.
      */
     void
-    liz_vm_extract_action_requests(liz_vm_t *vm,
-                                   liz_vm_actor_t *actor,
-                                   liz_vm_monitor_t *monitor,
-                                   liz_action_request_buffer_t *external_requests);
+    liz_vm_extract_and_clear_action_requests(liz_vm_t *vm,
+                                             liz_action_request_t *external_requests,
+                                             liz_int_t const external_request_capacity,
+                                             liz_id_t const actor_id);
     
     
     /**
@@ -370,9 +410,9 @@ extern "C" {
      */
     liz_vm_cmd_t
     liz_vm_step_cmd(liz_vm_t *vm,
-                    liz_vm_actor_t *actor,
-                    void * LIZ_RESTRICT actor_blackboard,
                     liz_vm_monitor_t *monitor,
+                    void * LIZ_RESTRICT actor_blackboard,
+                    liz_vm_actor_t const *actor,
                     liz_vm_shape_t const *shape,
                     liz_vm_cmd_t const cmd);
     
@@ -384,9 +424,9 @@ extern "C" {
      */
     liz_vm_cmd_t
     liz_vm_step_invoke_node(liz_vm_t *vm,
-                            void * LIZ_RESTRICT actor_blackboard,
-                            liz_vm_actor_t *actor,
                             liz_vm_monitor_t *monitor,
+                            void * LIZ_RESTRICT actor_blackboard,
+                            liz_vm_actor_t const *actor,
                             liz_vm_shape_t const *shape);
     
     
@@ -395,20 +435,27 @@ extern "C" {
      * associated with the decider.
      */
     liz_vm_cmd_t
-    liz_vm_step_guard_and_traverse(liz_vm_t *vm,
-                                   void * LIZ_RESTRICT actor_blackboard,
-                                   liz_vm_actor_t *actor,
-                                   liz_vm_monitor_t *monitor,
-                                   liz_vm_shape_t const *shape);
+    liz_vm_step_guard_decider(liz_vm_t *vm,
+                              liz_vm_monitor_t *monitor,
+                              void * LIZ_RESTRICT actor_blackboard,
+                              liz_vm_actor_t const *actor,
+                              liz_vm_shape_t const *shape);
     
     
     
     liz_vm_cmd_t
-    liz_vm_step_cleanup_and_actor_update(liz_vm_t *vm,
-                                         void * LIZ_RESTRICT actor_blackboard,
-                                         liz_vm_actor_t *actor,
-                                         liz_vm_monitor_t *monitor,
-                                         liz_vm_shape_t const *shape);
+    liz_vm_step_cleanup(liz_vm_t *vm,
+                        liz_vm_monitor_t *monitor,
+                        void * LIZ_RESTRICT actor_blackboard,
+                        liz_vm_actor_t const *actor,
+                        liz_vm_shape_t const *shape);
+    
+    
+    
+    void
+    liz_vm_extract_and_clear_actor_states(liz_vm_t *vm,
+                                          liz_vm_actor_t *actor,
+                                          liz_vm_shape_t const *shape);
     
     
     
@@ -446,7 +493,7 @@ extern "C" {
     
     
     
-#pragma mark Re-enter decider from bottom
+#pragma mark Re-enter deciders from bottom
     
     
     
@@ -467,6 +514,20 @@ extern "C" {
     
 #pragma mark Helpers
     
+    void
+    liz_vm_init(liz_vm_t *vm,
+                liz_shape_specification_t const spec,
+                uint16_t *persistent_state_change_shape_atom_indices,
+                uint16_t *decider_state_shape_atom_indices,
+                uint16_t *action_state_shape_atom_indices,
+                liz_persistent_state_t *persistent_state_changes,
+                uint16_t *decider_states,
+                uint8_t *action_states,
+                liz_vm_decider_guard_t *decider_guards,
+                liz_vm_action_request_t *action_requests);
+    
+    
+    
     /**
      * Cancels all of the following actions whose shape atom index is inside
      * the vm's cancellation range:
@@ -483,9 +544,9 @@ extern "C" {
      */
     void
     liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
+                                                liz_vm_monitor_t *monitor,
                                                 void * LIZ_RESTRICT actor_blackboard,
                                                 liz_vm_actor_t const *actor,
-                                                liz_vm_monitor_t *monitor,
                                                 liz_vm_shape_t const *shape);
     
     
@@ -513,63 +574,6 @@ extern "C" {
                                              LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
     }
     
-    
-    
-    
-    LIZ_INLINE static
-    liz_persistent_state_t*
-    liz_vm_actor_persistent_states(liz_vm_actor_t *actor)
-    {
-        return (liz_persistent_state_t *)(((char *)actor) + actor->persistent_states_offset);
-    }
-    
-    
-    
-    LIZ_INLINE static
-    uint16_t*
-    liz_vm_actor_decider_state_shape_atom_indices(liz_vm_actor_t *actor)
-    {
-        return (uint16_t *)(((char *)actor) + actor->decider_state_shape_atom_indices_offset); 
-    }
-    
-    
-    
-    LIZ_INLINE static
-    uint16_t*
-    liz_vm_actor_decider_states(liz_vm_actor_t *actor)
-    {
-        return (uint16_t *)(((char *)actor) + actor->decider_states_offset); 
-    }
-    
-    
-    
-    LIZ_INLINE static
-    uint16_t*
-    liz_vm_actor_action_state_shape_atom_indices(liz_vm_actor_t *actor)
-    {
-        return (uint16_t *)(((char *)actor) + actor->action_state_shape_atom_indices_offset); 
-    }
-    
-    
-    
-    LIZ_INLINE static
-    uint8_t*
-    liz_vm_actor_action_states(liz_vm_actor_t *actor)
-    {
-        return (uint8_t *)(((char *)actor) + actor->action_states_offset); 
-    }
-    
-    
-    
-    LIZ_INLINE static
-    liz_node_type_t
-    liz_vm_current_node_type(liz_vm_t const *vm,
-                             liz_vm_shape_t const *shape)
-    {
-        LIZ_ASSERT(shape->spec.shape_atom_count > vm->shape_atom_index);
-        
-        return (liz_node_type_t)(shape->atoms[vm->shape_atom_index].type_mask.type);
-    }
     
     
     LIZ_INLINE static
@@ -656,8 +660,8 @@ extern "C" {
      */
     void
     liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
-                                                      void * LIZ_RESTRICT actor_blackboard,
                                                       liz_vm_monitor_t *monitor,
+                                                      void * LIZ_RESTRICT actor_blackboard,
                                                       liz_vm_shape_t const *shape);
     
     
@@ -669,9 +673,9 @@ extern "C" {
      */
     void
     liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
+                                                                    liz_vm_monitor_t *monitor,
                                                                     void * LIZ_RESTRICT actor_blackboard,
                                                                     liz_vm_actor_t const *actor,
-                                                                    liz_vm_monitor_t *monitor,
                                                                     liz_vm_shape_t const *shape);;
     
     

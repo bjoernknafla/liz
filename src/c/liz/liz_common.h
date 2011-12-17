@@ -117,14 +117,18 @@ extern "C" {
     typedef  struct liz_shape_specification {
         uint16_t shape_atom_count;
         uint16_t immediate_action_function_count;
+        
+        // Influnences shape and actor.
         uint16_t persistent_state_count;
         
+        // Influences actor and vm.
         uint16_t decider_state_capacity;
         uint16_t action_state_capacity;
         
-        uint16_t action_request_capacity;
+        // Influences vm.
+        uint16_t persistent_state_change_capacity;
         uint16_t decider_guard_capacity;
-        
+        uint16_t action_request_capacity;
     } liz_shape_specification_t;
     
     
@@ -133,10 +137,9 @@ extern "C" {
      * Types of action requests send to other game systems.
      */
     typedef enum liz_action_request_type {
-        liz_action_request_type_launch = 0,
+        liz_action_request_type_remap_shape_atom_index = 0,
         liz_action_request_type_cancel,
-        liz_action_request_type_remap_shape_item_index
-        
+        liz_action_request_type_launch,
     } liz_action_request_type_t;
     
     
@@ -168,16 +171,23 @@ extern "C" {
     } liz_action_request_t;
     
     
+    
     /**
      * Receives action requests emitted by the vm.
+     *
+     * TODO: @todo Add a reserve space and a finish/flush filling reserved space
+     *             functions to ease synchronized/locked but still efficient
+     *             parallel buffer fills. An open fill counter is required then.
      */
+    /* Remove comments ones the request buffer is needed.
     typedef struct liz_action_request_buffer {
         size_t capacity;
         size_t count;
         
         liz_action_request_t *requests;
     } liz_action_request_buffer_t;
-
+     */
+    
     
     
     /**
