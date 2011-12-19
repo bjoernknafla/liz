@@ -134,7 +134,7 @@ SUITE(liz_common_internal_test)
     TEST(sort_decider_states_single_sequence_unordered)
     {
         liz_int_t const state_count = 3;
-        liz_int_t const stack_capacity = 1;
+        liz_int_t const stack_capacity = 2;
         
         uint16_t expected_states[state_count] = {103u, 102u, 101u};
         uint16_t expected_state_shape_atom_indices[state_count] = {7u, 23u, 42u};

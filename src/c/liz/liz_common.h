@@ -78,6 +78,24 @@ extern "C" {
     
     
     /**
+     * Placeholder for random number seed type.
+     *
+     * TODO: @todo Change the moment the random number generator is done.
+     */
+    typedef liz_int_t liz_random_number_seed_t;
+    
+    
+    
+    /**
+     * Placeholder for update/cancelation time.
+     *
+     * TODO: @todo Change the moment more is known about the time requirements.
+     */
+    typedef double liz_time_t;
+    
+    
+    
+    /**
      * Function interface for actions to call immediately during behavior tree
      * traversal (in contrast to persistent and deferred actions).
      *
@@ -94,7 +112,17 @@ extern "C" {
      *                               update if it is reached or cancel it 
      *                               otherwise.
      * liz_execution_state_success - action execution termined successfully.
-     * liz_execution_state_success - action execution terminated with a failure.
+     * liz_execution_state_fail    - action execution terminated with a failure.
+     * liz_execution_state_cancel  - must only be returned when called with 
+     *                               liz_execution_state_cancel as the execution
+     *                               request.
+     *
+     * Only use the liz vm supplied random number generator with the random
+     * number seed passed to the function to enable determinism even when
+     * different actors are interpreted by different vms in parallel.
+     *
+     * The time placeholder will pass a time value to the function should that
+     * info be necessary to update/cancel an actor.
      *
      * 
      * @attention Never return a launch state!
@@ -107,6 +135,8 @@ extern "C" {
      * TODO: @todo Decide if to dissallow continuing/running immediate actions.
      */
     typedef liz_execution_state_t (*liz_immediate_action_func_t)(void *actor_blackboard,
+                                                                 liz_random_number_seed_t *random_number_placeholder,
+                                                                 liz_time_t time_placeholder,
                                                                  liz_execution_state_t execution_request);
     
     

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3218F63D149FDB7D00FCBC3A /* liz_common.c in Sources */ = {isa = PBXBuildFile; fileRef = 32F7742B14925BD700328CB7 /* liz_common.c */; };
 		322622831493EC230073CFB7 /* liz_platform_types_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3226227F1493EC230073CFB7 /* liz_platform_types_test.cpp */; };
 		322622841493EC230073CFB7 /* liz_lookaside_stack_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 322622801493EC230073CFB7 /* liz_lookaside_stack_test.cpp */; };
 		322622851493EC230073CFB7 /* liz_lookaside_double_stack_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 322622811493EC230073CFB7 /* liz_lookaside_double_stack_test.cpp */; };
@@ -361,14 +362,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				32342B7B1496649E00C3B81E /* liz_vm.c in Sources */,
 				325D2D6714910C1E008EBB88 /* liz_test_main.cpp in Sources */,
 				322622831493EC230073CFB7 /* liz_platform_types_test.cpp in Sources */,
 				322622841493EC230073CFB7 /* liz_lookaside_stack_test.cpp in Sources */,
 				322622851493EC230073CFB7 /* liz_lookaside_double_stack_test.cpp in Sources */,
-				322622861493EC230073CFB7 /* liz_allocator_test.cpp in Sources */,
 				3226228C1493FC1E0073CFB7 /* liz_allocator.c in Sources */,
+				322622861493EC230073CFB7 /* liz_allocator_test.cpp in Sources */,
+				32342B7B1496649E00C3B81E /* liz_vm.c in Sources */,
 				32342B7914965E9100C3B81E /* liz_vm_test.cpp in Sources */,
+				3218F63D149FDB7D00FCBC3A /* liz_common.c in Sources */,
 				327B979914991BC100EFAA12 /* liz_common_internal_test.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

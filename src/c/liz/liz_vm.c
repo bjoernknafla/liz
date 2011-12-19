@@ -33,6 +33,7 @@
 
 #include "liz_assert.h"
 #include "liz_common.h"
+#include "liz_common_internal.h"
 
 
 
@@ -191,6 +192,7 @@ liz_vm_update_actor(liz_vm_t *vm,
                     liz_vm_monitor_t *monitor,
                     void * LIZ_RESTRICT user_data_lookup_context,
                     liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                    liz_time_t const time,
                     liz_vm_actor_t *actor,
                     liz_vm_shape_t const *shape)
 {
@@ -200,15 +202,18 @@ liz_vm_update_actor(liz_vm_t *vm,
         return;
     }
     
-    liz_vm_reset(vm, monitor);
+    liz_vm_reset(vm);
     
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
                                                    actor->header->user_data);
+
+    vm->actor_random_number_seed = actor->header->placeholder_for_random_number_seed;
     
-    while (liz_vm_cmd_done != vm->cmd) {
+    while (LIZ_VM_NEXT_STEP(vm)) {
         vm->cmd = liz_vm_step_cmd(vm,
                                   monitor,
                                   actor_blackboard,
+                                  time,
                                   actor,
                                   shape,
                                   vm->cmd);
@@ -224,19 +229,22 @@ liz_vm_cancel_actor(liz_vm_t *vm,
                     liz_vm_monitor_t *monitor,
                     void * LIZ_RESTRICT user_data_lookup_context,
                     liz_vm_user_data_lookup_func_t user_data_lookup_func,
+                    liz_time_t const time,
                     liz_vm_actor_t *actor,
                     liz_vm_shape_t const *shape)
 {
     LIZ_ASSERT(liz_vm_fulfills_shape_specification(vm, shape->spec));
     
-    liz_vm_reset(vm, monitor);
+    liz_vm_reset(vm);
     
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
                                                    actor->header->user_data);
     
+    vm->actor_random_number_seed = actor->header->placeholder_for_random_number_seed;
     vm->cmd = liz_vm_step_cmd(vm,
                               monitor,
                               actor_blackboard,
+                              time,
                               actor,
                               shape,
                               liz_vm_cmd_cleanup);
@@ -253,6 +261,7 @@ liz_vm_extract_and_clear_action_requests(liz_vm_t *vm,
                                          liz_int_t const external_request_capacity,
                                          liz_id_t const actor_id)
 {
+    LIZ_ASSERT(liz_vm_cmd_done == vm->cmd && "Vm update must have been cleaned up and done before extracting action requests.");
     LIZ_ASSERT(external_request_capacity >= liz_lookaside_double_stack_count_all(&vm->action_request_stack_header));
     
     liz_int_t external_index = 0;
@@ -295,13 +304,14 @@ liz_vm_extract_and_clear_action_requests(liz_vm_t *vm,
 
 
 void
-liz_vm_reset(liz_vm_t *vm,
-             liz_vm_monitor_t *monitor)
+liz_vm_reset(liz_vm_t *vm)
 {
     vm->shape_atom_index = 0;
     vm->actor_decider_state_index = 0;
     vm->actor_action_state_index = 0;
     vm->actor_persistent_state_index = 0;
+    
+    vm->actor_random_number_seed = 0;
     
     liz_lookaside_stack_clear(&vm->decider_state_stack_header);
     liz_lookaside_stack_clear(&vm->action_state_stack_header);
@@ -312,10 +322,6 @@ liz_vm_reset(liz_vm_t *vm,
     
     vm->cmd = liz_vm_cmd_invoke_node;
     vm->execution_state = liz_execution_state_launch;
-    
-    if (monitor) {
-        monitor->flag_index = 0;
-    }
 }
 
 
@@ -327,6 +333,7 @@ liz_vm_cmd_t
 liz_vm_step_cmd(liz_vm_t *vm,
                 liz_vm_monitor_t *monitor,
                 void * LIZ_RESTRICT actor_blackboard,
+                liz_time_t const time,
                 liz_vm_actor_t const *actor,
                 liz_vm_shape_t const *shape,
                 liz_vm_cmd_t const cmd)
@@ -338,6 +345,7 @@ liz_vm_step_cmd(liz_vm_t *vm,
             next_cmd = liz_vm_step_invoke_node(vm,
                                                monitor,
                                                actor_blackboard,
+                                               time,
                                                actor,
                                                shape);
             break;
@@ -346,6 +354,7 @@ liz_vm_step_cmd(liz_vm_t *vm,
             next_cmd = liz_vm_step_guard_decider(vm,
                                                  monitor,
                                                  actor_blackboard,
+                                                 time,
                                                  actor,
                                                  shape);
             break;
@@ -354,6 +363,7 @@ liz_vm_step_cmd(liz_vm_t *vm,
             liz_vm_step_cleanup(vm,
                                 monitor,
                                 actor_blackboard,
+                                time,
                                 actor,
                                 shape);
             
@@ -385,16 +395,20 @@ liz_vm_cmd_t
 liz_vm_step_invoke_node(liz_vm_t *vm,
                         liz_vm_monitor_t *monitor,
                         void * LIZ_RESTRICT actor_blackboard,
+                        liz_time_t const time,
                         liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape)
 {
     LIZ_ASSERT(shape->spec.shape_atom_count > vm->shape_atom_index);
     
+    liz_int_t const monitored_shape_atom_index = vm->shape_atom_index;
     liz_vm_monitor_node_flag_t traversal_direction = liz_vm_monitor_node_flag_enter_from_top;
     LIZ_VM_MONITOR_NODE(monitor,
+                        monitored_shape_atom_index,
                         traversal_direction,
                         vm,
-                        actor_blackboard,
+                        actor_blackboard, 
+                        time,
                         actor,
                         shape);
     
@@ -402,8 +416,10 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
     
     switch (shape->atoms[vm->shape_atom_index].type_mask.type) {
         case liz_node_type_immediate_action:
+            // Checks for invalid execution states internally.
             liz_vm_invoke_immediate_action(vm,
                                            actor_blackboard,
+                                           time,
                                            actor,
                                            shape);
             
@@ -414,6 +430,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
             break;
             
         case liz_node_type_deferred_action:
+            // Checks for invalid execution states internally.
             liz_vm_invoke_deferred_action(vm,
                                           actor,
                                           shape);
@@ -425,6 +442,7 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
             break;
             
         case liz_node_type_persistent_action:
+            // Checks for invalid execution states internally.
             liz_vm_invoke_persistent_action(vm,
                                             actor,
                                             shape);
@@ -435,29 +453,58 @@ liz_vm_step_invoke_node(liz_vm_t *vm,
             
             break;
             
-        case liz_node_type_sequence_decider: // Fall through
-        case liz_node_type_dynamic_priority_decider: // Fall through
-        case liz_node_type_concurrent_decider:
-            liz_vm_invoke_common_decider(vm,
-                                         actor,
-                                         shape);
+        case liz_node_type_sequence_decider:
+            liz_vm_invoke_sequence_decider(vm,
+                                           actor,
+                                           shape);
             
             // Traverse down to a decider child.
             next_cmd = liz_vm_cmd_invoke_node;
             traversal_direction = liz_vm_monitor_node_flag_leave_to_bottom;
             
+            LIZ_VM_CATCH_CHILDLESS_DECIDER(vm, &next_cmd, &traversal_direction);
+            
+            break;
+            
+        case liz_node_type_dynamic_priority_decider:
+            liz_vm_invoke_dynamic_priority_decider(vm,
+                                                   actor,
+                                                   shape);
+            
+            // Traverse down to a decider child.
+            next_cmd = liz_vm_cmd_invoke_node;
+            traversal_direction = liz_vm_monitor_node_flag_leave_to_bottom;
+            
+            LIZ_VM_CATCH_CHILDLESS_DECIDER(vm, &next_cmd, &traversal_direction);
+            
+            break;
+            
+        case liz_node_type_concurrent_decider:
+            liz_vm_invoke_concurrent_decider(vm,
+                                             actor,
+                                             shape);
+            
+            // Traverse down to a decider child.
+            next_cmd = liz_vm_cmd_invoke_node;
+            traversal_direction = liz_vm_monitor_node_flag_leave_to_bottom;
+            
+            LIZ_VM_CATCH_CHILDLESS_DECIDER(vm, &next_cmd, &traversal_direction);
+            
             break;
             
         default:
             assert(0 && "Unhandled node type.");
+            next_cmd = liz_vm_cmd_error;
+            traversal_direction = liz_vm_monitor_node_flag_error;
             break;
     }
     
-    (void)traversal_direction; // Inhibit compiler warning if monitoring is off.
-    LIZ_VM_MONITOR_NODE(monitor, 
+    LIZ_VM_MONITOR_NODE(monitor,
+                        monitored_shape_atom_index,
                         traversal_direction,
                         vm,
-                        actor_blackboard,
+                        actor_blackboard, 
+                        time,
                         actor,
                         shape);
     
@@ -470,6 +517,7 @@ liz_vm_cmd_t
 liz_vm_step_guard_decider(liz_vm_t *vm,
                           liz_vm_monitor_t *monitor,
                           void * LIZ_RESTRICT actor_blackboard,
+                          liz_time_t const time,
                           liz_vm_actor_t const *actor,
                           liz_vm_shape_t const *shape)
 {
@@ -482,11 +530,13 @@ liz_vm_step_guard_decider(liz_vm_t *vm,
     // Process decider node's child execution state, alas guard how to react.
     liz_vm_decider_guard_t const *top_guard = liz_vm_current_top_decider_guard(vm);
     liz_vm_monitor_node_flag_t traversal_direction = liz_vm_monitor_node_flag_enter_from_bottom;
-    
+    liz_int_t const monitored_shape_atom_index = top_guard->shape_atom_index;
     LIZ_VM_MONITOR_NODE(monitor,
+                        monitored_shape_atom_index,
                         traversal_direction,
                         vm, 
-                        actor_blackboard,
+                        actor_blackboard, 
+                        time,
                         actor,
                         shape);
     
@@ -527,6 +577,7 @@ liz_vm_step_guard_decider(liz_vm_t *vm,
         liz_vm_cancel_actions_in_cancellation_range(vm,
                                                     monitor,
                                                     actor_blackboard,
+                                                    time,
                                                     actor,
                                                     shape);
         
@@ -534,11 +585,12 @@ liz_vm_step_guard_decider(liz_vm_t *vm,
         traversal_direction = liz_vm_monitor_node_flag_leave_to_bottom;
     }
     
-    (void)traversal_direction; // Inhibit compiler warning if monitoring is off.
     LIZ_VM_MONITOR_NODE(monitor,
+                        monitored_shape_atom_index,
                         traversal_direction,
                         vm, 
-                        actor_blackboard,
+                        actor_blackboard, 
+                        time,
                         actor,
                         shape);
     
@@ -551,6 +603,7 @@ liz_vm_cmd_t
 liz_vm_step_cleanup(liz_vm_t *vm,
                     liz_vm_monitor_t *monitor,
                     void * LIZ_RESTRICT actor_blackboard,
+                    liz_time_t const time,
                     liz_vm_actor_t const *actor,
                     liz_vm_shape_t const *shape)
 {
@@ -562,6 +615,7 @@ liz_vm_step_cleanup(liz_vm_t *vm,
     liz_vm_cancel_actions_in_cancellation_range(vm,
                                                 monitor,
                                                 actor_blackboard,
+                                                time,
                                                 actor,
                                                 shape);
     
@@ -599,8 +653,9 @@ liz_vm_step_cleanup(liz_vm_t *vm,
     // That's it. Action states and action launch requests should be in the
     // correct order while action cancel requests should be in the reversed 
     // correct order which is taken into account when extracting the requests.
+    
+    return liz_vm_cmd_done;
 }
-
 
 
 
@@ -611,7 +666,8 @@ liz_vm_extract_and_clear_actor_states(liz_vm_t *vm,
 {
     LIZ_ASSERT(liz_vm_cmd_done == vm->cmd
                && "Vm update must have been cleaned up and done before transmitting states to actor.");
-    
+
+    actor->header->placeholder_for_random_number_seed = vm->actor_random_number_seed;
     actor->header->decider_state_count = liz_lookaside_stack_count(&vm->decider_guard_stack_header);
     actor->header->action_state_count = liz_lookaside_stack_count(&vm->action_state_stack_header);
     
@@ -654,9 +710,12 @@ liz_vm_extract_and_clear_actor_states(liz_vm_t *vm,
 void
 liz_vm_invoke_immediate_action(liz_vm_t *vm,
                                void * LIZ_RESTRICT actor_blackboard,
+                               liz_time_t const time,
                                liz_vm_actor_t const *actor,
                                liz_vm_shape_t const *shape)
 {
+    LIZ_ASSERT(liz_node_type_immediate_action == (liz_node_type_t)(shape->atoms[vm->shape_atom_index].type_mask.type));
+    
     // Determine the action state.
     liz_execution_state_t exec_state = liz_execution_state_launch;
     if (liz_seek_key(&vm->actor_action_state_index,
@@ -666,17 +725,27 @@ liz_vm_invoke_immediate_action(liz_vm_t *vm,
         
         exec_state = (liz_execution_state_t)actor->action_states[vm->actor_action_state_index];
         
-        // If action fails then cancellation shouldn't try to cancel it.
-        vm->actor_action_state_index += 1u;
+        // TODO: @todo Remove check once a system is in place that checks and 
+        //             rejects external invalid action state updates.
+        LIZ_VM_CATCH_INVALID_PERSISTENT_AND_IMMEDIATE_ACTION_STATE(&exec_state);
+        
+        liz_vm_consume_state(&vm->actor_action_state_index,
+                             vm->shape_atom_index,
+                             actor->action_state_shape_atom_indices,
+                             actor->header->action_state_count);
     }
     
     // Call the immediate action.
-    exec_state = liz_vm_tick_immediate_action(actor_blackboard,
+    exec_state = liz_vm_tick_immediate_action(&vm->actor_random_number_seed,
+                                              actor_blackboard,
+                                              time,
                                               exec_state,
                                               &shape->atoms[vm->shape_atom_index],
                                               shape->immediate_action_functions,
                                               shape->spec.immediate_action_function_count);
-    LIZ_ASSERT(liz_execution_state_cancel != exec_state && "Immediate actions must not return liz_execution_state_cancel when not called with it.");
+    
+    // Catch invalid user supplied immediate action function return values.
+    LIZ_VM_CATCH_INVALID_PERSISTENT_AND_IMMEDIATE_ACTION_STATE(&exec_state);
     
     // Store running state.
     if (liz_execution_state_running == exec_state) {
@@ -688,8 +757,7 @@ liz_vm_invoke_immediate_action(liz_vm_t *vm,
     }
     
     vm->execution_state = exec_state;
-    vm->cmd = liz_vm_cmd_guard_decider;
-    vm->shape_atom_index += 1u;
+    vm->shape_atom_index += LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN;
 }
 
 
@@ -699,18 +767,74 @@ liz_vm_invoke_deferred_action(liz_vm_t *vm,
                               liz_vm_actor_t const *actor,
                               liz_vm_shape_t const *shape)
 {
+    LIZ_ASSERT(liz_node_type_deferred_action == (liz_node_type_t)(shape->atoms[vm->shape_atom_index].type_mask.type));
+    
+    liz_execution_state_t exec_state = liz_execution_state_launch;
+    
     // Fetch state.
-    
-    // Push request if no state exists, push launch and set state to 
-    // launch, otherwise push running and switch state to running.
-    
-    // Set state.
-    
-    // Monitor ascent out of node.
-    
-    // Next cmd = guard_and_traverse
+    if (liz_seek_key(&vm->actor_action_state_index,
+                     vm->shape_atom_index,
+                     actor->action_state_shape_atom_indices,
+                     actor->header->action_state_count)) {
+
+        exec_state = (liz_execution_state_t)(actor->action_states[vm->actor_action_state_index]);
+        
+        // TODO: @todo Remove check once a system is in place that checks and 
+        //             rejects external invalid action state updates.
+        LIZ_VM_CATCH_INVALID_DEFERRED_ACTION_STATE(&exec_state);
+        
+        liz_vm_consume_state(&vm->actor_action_state_index,
+                             vm->shape_atom_index,
+                             actor->action_state_shape_atom_indices,
+                             actor->header->action_state_count);
+        
+        
+        if (liz_execution_state_launch == exec_state
+            || liz_execution_state_running == exec_state) {
+            
+            exec_state = liz_execution_state_running;
+            
+            // Emit running action state to remember the active deferred action.
+            liz_lookaside_stack_push(&vm->action_state_stack_header);
+            liz_int_t const action_state_top_index = liz_lookaside_stack_top_index(&vm->action_state_stack_header);
+            vm->action_state_shape_atom_indices[action_state_top_index] = vm->shape_atom_index;
+            vm->action_states[action_state_top_index] = (uint8_t)exec_state;
+        } // Else: Deferred action terminated with success or fail. Nothing to do.
+        
+    } else {
+        // Emit a launch request.
+        liz_vm_launch_or_cancel_deferred_action(vm->action_requests,
+                                                &vm->action_request_stack_header, 
+                                                liz_execution_state_launch, 
+                                                &shape->atoms[vm->shape_atom_index], 
+                                                vm->shape_atom_index);
+        /*
+        liz_shape_atom_t const first_atom = shape->atoms[vm->shape_atom_index];
+        liz_shape_atom_t const second_atom = shape->atoms[vm->shape_atom_index + 1];
+        liz_lookaside_double_stack_push(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+        liz_int_t const action_request_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+        vm->action_requests[action_request_top_index] = (liz_vm_action_request_t){
+            second_atom.deferred_action_second.action_id,
+            first_atom.deferred_action_first.resource_id,
+            (uint16_t)vm->shape_atom_index
+        };
+         */
+        
+        // Emit a launch execution state. If a higher-up decider cancels this
+        // action, then its action request is rolled back but no cancellation
+        // request is additionally created.
+        liz_lookaside_stack_push(&vm->action_state_stack_header);
+        liz_int_t const action_state_top_index = liz_lookaside_stack_top_index(&vm->action_state_stack_header);
+        vm->action_state_shape_atom_indices[action_state_top_index] = vm->shape_atom_index;
+        vm->action_states[action_state_top_index] = (uint8_t)liz_execution_state_launch;
+        
+        exec_state = liz_execution_state_launch;
+    }
     
     // Increment shape item cursor
+    vm->shape_atom_index += LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN;
+    
+    vm->execution_state = exec_state;
 }
 
 
@@ -720,39 +844,171 @@ liz_vm_invoke_persistent_action(liz_vm_t *vm,
                                 liz_vm_actor_t const *actor,
                                 liz_vm_shape_t const *shape)
 {
+    LIZ_ASSERT(liz_node_type_persistent_action == (liz_node_type_t)(shape->atoms[vm->shape_atom_index].type_mask.type));
+    
     // Fetch state
+    bool const state_found = liz_seek_key(&vm->actor_persistent_state_index,
+                                          vm->shape_atom_index,
+                                          shape->persistent_state_shape_atom_indices,
+                                          shape->spec.persistent_state_count);
+    (void)state_found;
+    LIZ_ASSERT(state_found && "All persistent states must exist.");
     
-    // Set state.
+    // Set and consume state.
+    liz_execution_state_t exec_state = (liz_execution_state_t)(actor->persistent_states[vm->actor_persistent_state_index].persistent_action_state);
     
-    // Monitor ascent out of node.
+    // TODO: @todo Remove check once a system is in place that checks and 
+    //             rejects external invalid action state updates.
+    LIZ_VM_CATCH_INVALID_PERSISTENT_AND_IMMEDIATE_ACTION_STATE(&exec_state);
     
-    // Next cmd = guard_and_traverse
+    liz_vm_consume_state(&vm->actor_persistent_state_index,
+                         vm->shape_atom_index,
+                         shape->persistent_state_shape_atom_indices,
+                         shape->spec.persistent_state_count);
     
-    // Increment shape item cursor
+    // Increment shape atom cursor.
+    vm->shape_atom_index += LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN;
+    vm->execution_state = exec_state;
 }
 
 
 
 void
-liz_vm_invoke_common_decider(liz_vm_t *vm,
-                             liz_vm_actor_t const *actor,
-                             liz_vm_shape_t const *shape)
+liz_vm_invoke_sequence_decider(liz_vm_t *vm,
+                               liz_vm_actor_t const *actor,
+                               liz_vm_shape_t const *shape)
 {
-    // Return guard_and_traverse if guard is empty, otherwise return invoke.
+    liz_shape_atom_t const decider_atom = shape->atoms[vm->shape_atom_index];
     
-    // Fetch state.
+    LIZ_ASSERT(liz_node_type_sequence_decider == (liz_node_type_t)(decider_atom.type_mask.type));
+
+    // Caller checks and reacts to childless deciders.
     
-    // Set up and push guard, advance shape item cursor.
+    // Fetch state - in case of a sequence decider.
+    LIZ_ASSERT(0u == LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN 
+               && "Invalid assumption that the shape atom count per sequence decider child is zero. This is assumed because there is no efficient way to determine the number of children of a sequence decider.");
+    uint16_t reached_child = vm->shape_atom_index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN;
     
-    // Set state to fail - no consequence when descending but w/o a 
-    // child the ascent means a fail.
+    if (liz_seek_key(&vm->actor_decider_state_index,
+                     vm->shape_atom_index,
+                     actor->decider_state_shape_atom_indices,
+                     actor->header->decider_state_count)) {
+        
+        reached_child = actor->decider_states[vm->actor_decider_state_index];
+        
+        liz_vm_consume_state(&vm->actor_decider_state_index,
+                             vm->shape_atom_index,
+                             actor->decider_state_shape_atom_indices,
+                             actor->header->decider_state_count);
+    }
     
-    // Next cmd = traverse
-    
+    // Set up and push guard.
     // Set the aggregate state to success - can not be set to launch as launch
     // and running are treated the same to simplify action state handling for
-    // deferred actions. Alas: assume the best for the concurrent decider.
+    // deferred actions. Alas: assume the best for the concurrent decider.    
+    liz_lookaside_stack_push(&vm->decider_guard_stack_header);
+    vm->decider_guards[liz_lookaside_stack_top_index(&vm->decider_guard_stack_header)] = (liz_vm_decider_guard_t){
+        vm->shape_atom_index,
+        vm->shape_atom_index + decider_atom.sequence_decider.end_offset,
+        (uint16_t)liz_lookaside_stack_count(&vm->decider_state_stack_header),
+        (uint16_t)liz_lookaside_double_stack_count(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH),
+        reached_child,
+        0,
+        decider_atom.sequence_decider.type,
+        {0} // Padding.
+    };
     
+    vm->shape_atom_index = reached_child;
+    
+    // Set execution state to fail - no consequence when descending but no child
+    // means going up and a decider which couldn't succeed through a child 
+    // should fail.
+    // Keep in mind that no decider child is an error!
+    vm->execution_state = liz_execution_state_fail;
+}
+
+
+
+void
+liz_vm_invoke_dynamic_priority_decider(liz_vm_t *vm,
+                                       liz_vm_actor_t const *actor,
+                                       liz_vm_shape_t const *shape)
+{
+    (void)actor;
+    
+    liz_shape_atom_t const decider_atom = shape->atoms[vm->shape_atom_index];
+    
+    LIZ_ASSERT(liz_node_type_dynamic_priority_decider == (liz_node_type_t)(decider_atom.type_mask.type));
+    
+    // Caller checks and reacts to childless deciders.
+    
+    // Set up and push guard.
+    // Set the aggregate state to success - can not be set to launch as launch
+    // and running are treated the same to simplify action state handling for
+    // deferred actions. Alas: assume the best for the concurrent decider.    
+    liz_lookaside_stack_push(&vm->decider_guard_stack_header);
+    vm->decider_guards[liz_lookaside_stack_top_index(&vm->decider_guard_stack_header)] = (liz_vm_decider_guard_t){
+        vm->shape_atom_index,
+        vm->shape_atom_index + decider_atom.dynamic_priority_decider.end_offset,
+        (uint16_t)liz_lookaside_stack_count(&vm->decider_state_stack_header),
+        (uint16_t)liz_lookaside_double_stack_count(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH),
+        0,
+        0,
+        decider_atom.dynamic_priority_decider.type,
+        {0} // Padding.
+    };
+    
+    LIZ_ASSERT(0u == LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN 
+               && "Invalid assumption that the shape atom count per dynamic priority decider child is zero. This is assumed because there is no efficient way to determine the number of children of a dynamic priority decider.");
+    vm->shape_atom_index += LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN;
+    
+    // Set execution state to fail - no consequence when descending but no child
+    // means going up and a decider which couldn't succeed through a child 
+    // should fail.
+    // Keep in mind that no decider child is an error!
+    vm->execution_state = liz_execution_state_fail;
+}
+
+
+
+void
+liz_vm_invoke_concurrent_decider(liz_vm_t *vm,
+                                 liz_vm_actor_t const *actor,
+                                 liz_vm_shape_t const *shape)
+{
+    (void)actor;
+    
+    liz_shape_atom_t const decider_atom = shape->atoms[vm->shape_atom_index];
+    
+    LIZ_ASSERT(liz_node_type_concurrent_decider == (liz_node_type_t)(decider_atom.type_mask.type));
+    
+    // Caller checks and reacts to childless deciders.
+    
+    // Set up and push guard.
+    // Set the aggregate state to success - can not be set to launch as launch
+    // and running are treated the same to simplify action state handling for
+    // deferred actions. Alas: assume the best for the concurrent decider.    
+    liz_lookaside_stack_push(&vm->decider_guard_stack_header);
+    vm->decider_guards[liz_lookaside_stack_top_index(&vm->decider_guard_stack_header)] = (liz_vm_decider_guard_t){
+        vm->shape_atom_index,
+        vm->shape_atom_index + decider_atom.concurrent_decider.end_offset,
+        (uint16_t)liz_lookaside_stack_count(&vm->decider_state_stack_header),
+        (uint16_t)liz_lookaside_double_stack_count(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH),
+        0,
+        (uint8_t)liz_execution_state_success,
+        decider_atom.concurrent_decider.type,
+        {0} // Padding.
+    };
+    
+    LIZ_ASSERT(0u == LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN 
+               && "Invalid assumption that the shape atom count per concurrent decider child is zero. This is assumed because there is no efficient way to determine the number of children of a concurrent decider.");
+    vm->shape_atom_index += LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN;
+    
+    // Set execution state to fail - no consequence when descending but no child
+    // means going up and a decider which couldn't succeed through a child 
+    // should fail.
+    // Keep in mind that no decider child is an error!
+    vm->execution_state = liz_execution_state_fail;
 }
 
 
@@ -778,7 +1034,7 @@ liz_vm_guard_sequence_decider(liz_vm_t *vm)
             liz_lookaside_stack_push(&vm->decider_state_stack_header);
             liz_int_t const top_index = liz_lookaside_stack_top_index(&vm->decider_state_stack_header);
             
-            vm->decider_states[top_index] = guard->sequence_child_index;
+            vm->decider_states[top_index] = guard->sequence_reached_child_index;
             vm->decider_state_shape_atom_indices[top_index] = guard->shape_atom_index;
             
             vm->shape_atom_index = (uint16_t)guard->end_index;
@@ -787,7 +1043,7 @@ liz_vm_guard_sequence_decider(liz_vm_t *vm)
             
         case liz_execution_state_success:
             // Child succeeded, on to the next child, remember reached child.
-            guard->sequence_child_index = (uint16_t)vm->shape_atom_index; 
+            guard->sequence_reached_child_index = (uint16_t)vm->shape_atom_index; 
             LIZ_ASSERT(vm->decider_state_stack_header.count == guard->decider_state_rollback_marker);
             break;
             
@@ -817,7 +1073,7 @@ liz_vm_guard_concurrent_decider(liz_vm_t *vm)
             // Child is running and turns the whole concurrent decider to run
             // (as long as no later child fails). Go on and invoke the remaining
             // children.
-            guard->concurrent_aggregated_state = (uint8_t)liz_execution_state_running;            
+            guard->concurrent_execution_state = (uint8_t)liz_execution_state_running;            
             break;
             
         case liz_execution_state_success:
@@ -825,7 +1081,7 @@ liz_vm_guard_concurrent_decider(liz_vm_t *vm)
             // For the case that this was the last child of the decider, re-
             // establish the aggregated state. It starts as success and when
             // switched to running sticks to it as long as no child fails.
-            vm->execution_state = guard->concurrent_aggregated_state;
+            vm->execution_state = guard->concurrent_execution_state;
             break;
             
         case liz_execution_state_fail:
@@ -911,6 +1167,8 @@ liz_vm_init(liz_vm_t *vm,
     vm->decider_guards = decider_guards;
     vm->action_requests = action_requests;
     
+    vm->actor_random_number_seed = 0;
+    
     vm->persistent_state_change_stack_header = liz_lookaside_stack_make(spec.persistent_state_change_capacity, 0);
     vm->decider_state_stack_header = liz_lookaside_stack_make(spec.decider_state_capacity, 0);
     vm->action_state_stack_header = liz_lookaside_stack_make(spec.action_state_capacity, 0);
@@ -918,7 +1176,7 @@ liz_vm_init(liz_vm_t *vm,
     vm->decider_guard_stack_header = liz_lookaside_stack_make(spec.decider_guard_capacity, 0);
     vm->action_request_stack_header = liz_lookaside_double_stack_make(spec.action_request_capacity, 0, 0);
     
-    liz_vm_reset(vm, NULL);
+    liz_vm_reset(vm);
 }
 
 
@@ -927,6 +1185,7 @@ void
 liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
                                             liz_vm_monitor_t *monitor,
                                             void * LIZ_RESTRICT actor_blackboard,
+                                            liz_time_t const time,
                                             liz_vm_actor_t const *actor,
                                             liz_vm_shape_t const *shape)
 {
@@ -935,8 +1194,10 @@ liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
     }
    
     liz_vm_cancel_running_actions_from_current_update(vm,
-                                                      actor_blackboard,
                                                       monitor,
+                                                      actor_blackboard,
+                                                      time,
+                                                      actor,
                                                       shape);
     
     // Running this after the jump back to have linear shape atom stream 
@@ -944,6 +1205,7 @@ liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
     liz_vm_cancel_launched_and_running_actions_from_previous_update(vm,
                                                                     monitor,
                                                                     actor_blackboard,
+                                                                    time,
                                                                     actor,
                                                                     shape);
     
@@ -956,16 +1218,114 @@ liz_vm_cancel_actions_in_cancellation_range(liz_vm_t *vm,
 
 
 
+/**
+ * TODO: @todo Extract and complete to create a breakpoint monitor on top of the 
+ *             simpler monitor concept.
+ */
+/*
 void
-liz_vm_monitor_node(liz_vm_monitor_t *monitor,
-                    unsigned int mask,
+liz_vm_monitor_node(uintptr_t user_data,
+                    uint16_t const node_shape_atom_index,
+                    liz_uint_t const traversal_direction,
                     liz_vm_t const *vm,
-                    void const * LIZ_RESTRICT blackboard,
+                    void const * LIZ_RESTRICT actor_blackboard,
                     liz_vm_actor_t const *actor,
                     liz_vm_shape_t const *shape)
 {
+    liz_vm_breakpoint_monitor_t *monitor = (liz_vm_breakpoint_monitor_t *)user_data;
+    
+    LIZ_ASSERT(0 < monitor->breakpoint_function_count);
+    
+    liz_vm_monitor_breakpoint_stream_t const *breakpoints = monitor->node_breakpoints;
+    
+    if (NULL == monitor
+        || NULL == breakpoints) {
+        
+        return;
+    }
 
+    
+    if (liz_vm_monitor_node_flag_cancel_action & traversal_direction) {
+        
+        liz_uint_t const cancel_mask = traversal_direction - liz_vm_monitor_node_flag_cancel_action;
+        
+        // Cancellation will lead to the end of the cancelled sub-stream, 
+        // reusing the breakpoint index to enable an efficient cancellation 
+        // treatment.
+        monitor->breakpoint_index = 0;
+        if (!liz_seek_key(&monitor->breakpoint_index, 
+                          node_shape_atom_index,
+                          breakpoints->shape_atom_indices,
+                          breakpoints->count)) {
+         
+            return;
+        }
+        
+        // Introduce a helper function for this and reuse it below!
+        if (traversal_direction & breakpoints->flags[monitor->breakpoint_index]) {
+            liz_int_t const func_index = breakpoints->function_indices[monitor->breakpoint_index];
+            LIZ_ASSERT(func_index < monitor->breakpoint_function_count);
+            
+            monitor->breakpoint_functions[func_index]((uintptr_t)monitor,
+                                                      node_shape_atom_index,
+                                                      traversal_direction,
+                                                      vm,
+                                                      actor_blackboard,
+                                                      actor,
+                                                      shape);
+        }
+        
+        
+        return;
+    }
+
+
+    switch (traversal_direction) {
+        case liz_vm_monitor_node_flag_enter_from_top:
+            // Invoke a node, all vm data identify the node.
+            
+            if (liz_seek_key(&monitor->breakpoint_index,
+                             node_shape_atom_index,
+                             breakpoints->shape_atom_indices,
+                             breakpoints->count)) {
+                
+                liz_vm_breakpoint_monitor_trigger_breakpoint(monitor,
+                                                             node_shape_atom_index,
+                                                             traversal_direction,
+                                                             vm,
+                                                             actor_blackboard,
+                                                             actor,
+                                                             shape);
+                
+                if (shape->atoms[node_shape_atom_index].type_mask.type > liz_node_type_action_max_id
+                    && ~((liz_uint_t)(liz_vm_monitor_node_flag_cancel_action | liz_vm_monitor_node_flag_enter_from_top)) & breakpoints->flags[monitor->breakppoint_index]) {
+                    
+                    // Push breakpoint guard onto breakpoint guard stack.
+                    
+                }
+                
+                
+            }
+            
+            break;
+        case liz_vm_monitor_node_flag_enter_from_bottom:
+            // Entering a guard from the bottom - see vm stack. Check if guarding this shape atom index.
+            break;
+        case liz_vm_monitor_node_flag_leave_to_top:
+            // Leaving an node or a guard. Pop monitor stack if it matches the shape atom index.
+            break;
+        case liz_vm_monitor_node_flag_leave_to_bottom:
+            // Leaving decider node or its guard. In both cases guard is on stack.
+            break;
+        default:
+            LIZ_ASSERT(0 && "Unhandled traversal direction.");
+            break;
+    }
+    
+    
+#error Only push a guard breakpoint to the stack if the stack isn't full!
 }
+*/
 
 
 
@@ -1029,9 +1389,11 @@ liz_vm_launch_or_cancel_deferred_action(liz_vm_action_request_t *action_requests
 
 
 void
-liz_vm_cancel_immediate_or_deferred_action(void * LIZ_RESTRICT actor_blackboard,
+liz_vm_cancel_immediate_or_deferred_action(liz_random_number_seed_t *rnd_seed,
+                                           void * LIZ_RESTRICT actor_blackboard,
                                            liz_vm_action_request_t *deferred_action_requests,
                                            liz_lookaside_double_stack_t *deferred_action_request_stack_header,
+                                           liz_time_t const time,
                                            liz_shape_atom_t const *action_begin_shape_atom,
                                            liz_int_t const shape_atom_index,
                                            liz_immediate_action_func_t const *immediate_action_functions,
@@ -1040,7 +1402,9 @@ liz_vm_cancel_immediate_or_deferred_action(void * LIZ_RESTRICT actor_blackboard,
     switch (action_begin_shape_atom->type_mask.type) {
         case liz_node_type_immediate_action:
         {
-            liz_execution_state_t exec_state = liz_vm_tick_immediate_action(actor_blackboard,
+            liz_execution_state_t exec_state = liz_vm_tick_immediate_action(rnd_seed,
+                                                                            actor_blackboard,
+                                                                            time,
                                                                             liz_execution_state_cancel,
                                                                             action_begin_shape_atom,
                                                                             immediate_action_functions,
@@ -1076,6 +1440,8 @@ void
 liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
                                                   liz_vm_monitor_t *monitor,
                                                   void * LIZ_RESTRICT actor_blackboard,
+                                                  liz_time_t const time,
+                                                  liz_vm_actor_t const *actor,
                                                   liz_vm_shape_t const *shape)
 {
     liz_vm_cancellation_range_t const range = vm->cancellation_range;
@@ -1092,21 +1458,48 @@ liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
                    && "Vm action states must be in increasing shape atom index order.");
         LIZ_ASSERT(range.end_index > vm->action_state_shape_atom_indices[i] 
                    && "Actions must be cancelled before invoking new actions outside of the cancellation range.");
+        LIZ_ASSERT(liz_execution_state_launch == (liz_execution_state_t)(vm->action_states[i])
+                   || liz_execution_state_running == (liz_execution_state_t)(vm->action_states[i])
+                   && "Termination states must not be stored for the next update.");
         
-        if (liz_execution_state_launch == (liz_execution_state_t)(vm->action_states[i])) {
-            // Action launch requests from deferred actions invoked during the 
-            // current update have already been rolled back by the decider
-            // guards and neat no further treatment.
-            continue;
+        
+        if (liz_execution_state_running == (liz_execution_state_t)(vm->action_states[i])) {
+            LIZ_VM_MONITOR_NODE(monitor,
+                                vm->action_state_shape_atom_indices[i],
+                                (liz_uint_t)(liz_vm_monitor_node_flag_cancel_action 
+                                             | liz_vm_monitor_node_flag_enter_from_top),
+                                vm, 
+                                actor_blackboard,  
+                                time,
+                                actor, 
+                                shape);
+            
+            liz_vm_cancel_immediate_or_deferred_action(&vm->actor_random_number_seed,
+                                                       actor_blackboard,
+                                                       vm->action_requests,
+                                                       &vm->action_request_stack_header,
+                                                       time,
+                                                       &shape->atoms[vm->action_state_shape_atom_indices[i]],
+                                                       vm->action_state_shape_atom_indices[i],
+                                                       shape->immediate_action_functions,
+                                                       shape->spec.immediate_action_function_count);
+            
+            LIZ_VM_MONITOR_NODE(monitor,
+                                vm->action_state_shape_atom_indices[i] ,
+                                (liz_uint_t)(liz_vm_monitor_node_flag_cancel_action 
+                                             | liz_vm_monitor_node_flag_leave_to_top),
+                                vm, 
+                                actor_blackboard,  
+                                time,
+                                actor, 
+                                shape);
         }
         
-        liz_vm_cancel_immediate_or_deferred_action(actor_blackboard,
-                                                   vm->action_requests,
-                                                   &vm->action_request_stack_header,
-                                                   &shape->atoms[vm->action_state_shape_atom_indices[i]],
-                                                   vm->action_state_shape_atom_indices[i],
-                                                   shape->immediate_action_functions,
-                                                   shape->spec.immediate_action_function_count);
+        // Action launch requests from deferred actions invoked during the 
+        // current update have already been rolled back by the decider
+        // guards and need no further treatment.
+        // No other action than deferred action are allowed to return a launch
+        // state.
     }
     
     // Rollback to remove the new states just cancelled.
@@ -1123,6 +1516,7 @@ void
 liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
                                                                 liz_vm_monitor_t *monitor,
                                                                 void * LIZ_RESTRICT actor_blackboard,
+                                                                liz_time_t const time,
                                                                 liz_vm_actor_t const *actor,
                                                                 liz_vm_shape_t const *shape)
 {
@@ -1142,19 +1536,41 @@ liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
         }
         
         liz_execution_state_t const action_state = (liz_execution_state_t)(actor->action_states[actor_action_index]);
-        if (liz_execution_state_launch != action_state
-            && liz_execution_state_running != action_state) {
-            // Only cancel yet not visited launched or running actions.
-            continue;
+        if (liz_execution_state_launch == action_state
+            || liz_execution_state_running == action_state) {
+            
+            // Only cancel running or previously launched and not yet terminated
+            // actions.
+            LIZ_VM_MONITOR_NODE(monitor,
+                                actor->action_state_shape_atom_indices[actor_action_index] ,
+                                (liz_uint_t)(liz_vm_monitor_node_flag_cancel_action 
+                                             | liz_vm_monitor_node_flag_enter_from_top),
+                                vm, 
+                                actor_blackboard,  
+                                time,
+                                actor, 
+                                shape);
+            
+            liz_vm_cancel_immediate_or_deferred_action(&vm->actor_random_number_seed,
+                                                       actor_blackboard,
+                                                       vm->action_requests,
+                                                       &vm->action_request_stack_header,
+                                                       time,
+                                                       &shape->atoms[shape_atom_index],
+                                                       shape_atom_index,
+                                                       shape->immediate_action_functions,
+                                                       shape->spec.immediate_action_function_count);
+            
+            LIZ_VM_MONITOR_NODE(monitor,
+                                actor->action_state_shape_atom_indices[actor_action_index] ,
+                                (liz_uint_t)(liz_vm_monitor_node_flag_cancel_action 
+                                             | liz_vm_monitor_node_flag_leave_to_top),
+                                vm, 
+                                actor_blackboard, 
+                                time,
+                                actor, 
+                                shape);
         }
-        
-        liz_vm_cancel_immediate_or_deferred_action(actor_blackboard,
-                                                   vm->action_requests,
-                                                   &vm->action_request_stack_header,
-                                                   &shape->atoms[shape_atom_index],
-                                                   shape_atom_index,
-                                                   shape->immediate_action_functions,
-                                                   shape->spec.immediate_action_function_count);
     }
     
     // Set the vm's actor action state index forward to not read the cancelled

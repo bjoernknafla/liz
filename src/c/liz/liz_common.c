@@ -48,13 +48,13 @@ liz_shape_specification_merge_max(liz_shape_specification_t lhs,
 {
     liz_shape_specification_t result;
     
-    result.shape_atom_count = (uint16_t)liz_max_int(lhs.shape_atom_count, rhs.shape_atom_count);
-    result.immediate_action_function_count = (uint16_t)liz_max_int(lhs.immediate_action_function_count, rhs.immediate_action_function_count);
-    result.persistent_state_count = (uint16_t)liz_max_int(lhs.persistent_state_count, rhs.persistent_state_count);
-    result.decider_guard_capacity = (uint16_t)liz_max_int(lhs.decider_guard_capacity, rhs.decider_guard_capacity);
-    result.decider_state_capacity = (uint16_t)liz_max_int(lhs.decider_state_capacity, rhs.decider_state_capacity);
-    result.action_state_capacity = (uint16_t)liz_max_int(lhs.action_state_capacity, rhs.action_state_capacity);
-    result.action_request_capacity = (uint16_t)liz_max_int(lhs.action_request_capacity, rhs.action_request_capacity);
+    result.shape_atom_count = (uint16_t)liz_max(lhs.shape_atom_count, rhs.shape_atom_count);
+    result.immediate_action_function_count = (uint16_t)liz_max(lhs.immediate_action_function_count, rhs.immediate_action_function_count);
+    result.persistent_state_count = (uint16_t)liz_max(lhs.persistent_state_count, rhs.persistent_state_count);
+    result.decider_guard_capacity = (uint16_t)liz_max(lhs.decider_guard_capacity, rhs.decider_guard_capacity);
+    result.decider_state_capacity = (uint16_t)liz_max(lhs.decider_state_capacity, rhs.decider_state_capacity);
+    result.action_state_capacity = (uint16_t)liz_max(lhs.action_state_capacity, rhs.action_state_capacity);
+    result.action_request_capacity = (uint16_t)liz_max(lhs.action_request_capacity, rhs.action_request_capacity);
     
     return result;
 }
@@ -63,7 +63,7 @@ liz_shape_specification_merge_max(liz_shape_specification_t lhs,
 
 void
 liz_apply_persistent_state_changes(liz_persistent_state_t * LIZ_RESTRICT persistent_states,
-                                   uint16_t *  LIZ_RESTRICT  persistent_state_shape_atom_indices,
+                                   uint16_t const *  LIZ_RESTRICT  persistent_state_shape_atom_indices,
                                    liz_int_t persistent_state_count,
                                    liz_persistent_state_t const * LIZ_RESTRICT persistent_state_changes,
                                    uint16_t const * LIZ_RESTRICT persistent_state_change_shape_atom_indices,
@@ -71,10 +71,10 @@ liz_apply_persistent_state_changes(liz_persistent_state_t * LIZ_RESTRICT persist
 {
     liz_int_t apply_index = 0;
     
-    for (liz_int_t ci = 0; i < persistent_state_change_count; ++i) {
+    for (liz_int_t ci = 0; ci < persistent_state_change_count; ++ci) {
         
         bool const found = liz_seek_key(&apply_index,
-                                        persistent_state_change_shape_atom_indices[i],
+                                        persistent_state_change_shape_atom_indices[ci],
                                         persistent_state_shape_atom_indices,
                                         persistent_state_count);
         (void)found;
@@ -176,7 +176,7 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
                                                    uint16_t * LIZ_RESTRICT key_reorder_stack,
                                                    liz_int_t const stack_capacity)
 {
-    liz_lookaside_stack_t reorder_stack = liz_lookaside_stack_make(stack_capacity,
+    liz_lookaside_stack_t reorder_stack = liz_lookaside_stack_make(stack_capacity, 0);
     
     liz_int_t kv_read_index = key_value_count - 1;
     liz_int_t kv_write_index = key_value_count - 1;
@@ -185,15 +185,15 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
     
     while (0 < kv_read_index) {
         LIZ_ASSERT(kv_read_index <= kv_write_index && "Writing must not overtake reading.");
-        LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[reorder_stack_top_index] && "Keys must be unique.")
+        LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[reorder_stack_top_index] && "Keys must be unique.");
         
         if (!liz_lookaside_stack_is_empty(&reorder_stack) 
             && keys[kv_read_index] < key_reorder_stack[reorder_stack_top_index]) {
             
             // Move the key and value from the stack in place.
             keys[kv_write_index] = key_reorder_stack[reorder_stack_top_index];
-            liz_memcpy(values + value_size_in_bytes * kv_write_index,
-                       value_reorder_stack + value_size_in_bytes * reorder_stack_top_index,
+            liz_memcpy((char *)values + value_size_in_bytes * kv_write_index,
+                       (char *)value_reorder_stack + value_size_in_bytes * reorder_stack_top_index,
                        value_size_in_bytes);
             
             liz_lookaside_stack_pop(&reorder_stack);
@@ -210,8 +210,8 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             
             // read and write indices are equal for an already sorted list, 
             // therefore use memmove instead of memcpy.
-            liz_memmove(values + value_size_in_bytes * kv_write_index,
-                        values + value_size_in_bytes * kv_read_index,
+            liz_memmove((char *)values + value_size_in_bytes * kv_write_index,
+                        (char *)values + value_size_in_bytes * kv_read_index,
                         value_size_in_bytes);
             
             --kv_read_index;
@@ -222,8 +222,8 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             reorder_stack_top_index = liz_lookaside_stack_top_index(&reorder_stack);
             
             key_reorder_stack[reorder_stack_top_index] = keys[kv_read_index];
-            liz_memcpy(value_reorder_stack + value_size_in_bytes * reorder_stack_top_index, 
-                       value_size_in_bytes * kv_read_index, 
+            liz_memcpy((char *)value_reorder_stack + value_size_in_bytes * reorder_stack_top_index, 
+                       (char *)values + value_size_in_bytes * kv_read_index, 
                        value_size_in_bytes);
             
             --kv_read_index;
@@ -231,7 +231,7 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
     }
 
     // All keys and values read, write what's left on the stack back.
-    LIZ_ASSERT(kv_write_index + 1 == liz_lookaside_stack_count(&reorder_stack));
+    LIZ_ASSERT(0 == liz_lookaside_stack_count(&reorder_stack) || kv_write_index + 1 == liz_lookaside_stack_count(&reorder_stack));
     liz_memcpy(keys, 
                key_reorder_stack, 
                sizeof(keys[0]) * liz_lookaside_stack_count(&reorder_stack));

@@ -58,12 +58,30 @@ extern "C" {
      */
     typedef enum liz_node_type {
         liz_node_type_immediate_action = 0,
-        liz_node_type_deferred_action,
-        liz_node_type_persistent_action,
+        liz_node_type_deferred_action = 1,
+        liz_node_type_persistent_action = 2,
+        liz_node_type_action_max_id = 2,
         liz_node_type_sequence_decider,
         liz_node_type_dynamic_priority_decider,
         liz_node_type_concurrent_decider
     } liz_node_type_t;
+    
+    
+    
+#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION 1u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN 0u    
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION 2u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN 0u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION 1u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN 0u    
+#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER 1u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN 0u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER 1u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN 0u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER 1u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN 0u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER 2u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER_TWO_CHILDREN 3u
     
     
     /**
@@ -111,7 +129,17 @@ extern "C" {
             uint8_t type;
             uint8_t padding;
             uint16_t end_offset;
-        } common_decider; // Used by sequence, priority, concurrent decider.
+        } sequence_decider;
+        struct {
+            uint8_t type;
+            uint8_t padding;
+            uint16_t end_offset;
+        } dynamic_priority_decider;
+        struct {
+            uint8_t type;
+            uint8_t padding;
+            uint16_t end_offset;
+        } concurrent_decider;
         struct {
             uint8_t type;
             uint8_t padding;
@@ -151,8 +179,15 @@ extern "C" {
 
     
     
+    /**
+     *
+     *
+     * TODO: @todo Add random number seed when implementing the probability 
+     *             decider.
+     */
     typedef struct liz_actor_header {
         uintptr_t user_data;
+        liz_int_t placeholder_for_random_number_seed;
         liz_id_t actor_id;
         uint16_t decider_state_count;
         uint16_t action_state_count;
@@ -198,7 +233,7 @@ extern "C" {
     
     void
     liz_apply_persistent_state_changes(liz_persistent_state_t * LIZ_RESTRICT persistent_states,
-                                       uint16_t *  LIZ_RESTRICT  persistent_state_shape_atom_indices,
+                                       uint16_t const *  LIZ_RESTRICT  persistent_state_shape_atom_indices,
                                        liz_int_t persistent_state_count,
                                        liz_persistent_state_t const * LIZ_RESTRICT persistent_state_changes,
                                        uint16_t const * LIZ_RESTRICT persistent_state_change_shape_atom_indices,
