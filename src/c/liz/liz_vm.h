@@ -709,7 +709,7 @@ extern "C" {
     liz_vm_decider_guard_t*
     liz_vm_current_top_decider_guard(liz_vm_t *vm)
     {
-        LIZ_ASSERT(!liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header));
+        LIZ_ASSERT(0 != liz_lookaside_stack_count(&vm->decider_guard_stack_header));
         
         liz_int_t const top_index = liz_lookaside_stack_top_index(&vm->decider_guard_stack_header);
         return &vm->decider_guards[top_index];

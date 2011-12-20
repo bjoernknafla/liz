@@ -523,7 +523,7 @@ liz_vm_step_guard_decider(liz_vm_t *vm,
 {
     // An empty guard stack means that the root node has been left to its top,
     // alas the update is done.
-    if (liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header)) {
+    if (0 == liz_lookaside_stack_count(&vm->decider_guard_stack_header)) {
         return liz_vm_cmd_cleanup;
     }
     
@@ -607,7 +607,7 @@ liz_vm_step_cleanup(liz_vm_t *vm,
                     liz_vm_actor_t const *actor,
                     liz_vm_shape_t const *shape)
 {
-    LIZ_ASSERT(liz_lookaside_stack_is_empty(&vm->decider_guard_stack_header) 
+    LIZ_ASSERT(0 == liz_lookaside_stack_count(&vm->decider_guard_stack_header) 
                && "Decider guard stack must be empty before cleanup.");
     
     // If the last traversal steps were all up and then reached the root

@@ -297,6 +297,7 @@ SUITE(liz_lookaside_double_stack_test)
     
     
     
+    /*
     TEST(empty_stack_is_empty)
     {
         liz_lookaside_double_stack_t stack = liz_lookaside_double_stack_make(4, 0, 0);
@@ -343,6 +344,7 @@ SUITE(liz_lookaside_double_stack_test)
         
         CHECK_EQUAL(false, liz_lookaside_double_stack_is_empty(&stack));
     }
+    */
     
     
     TEST(empty_stack_is_not_full) 
@@ -416,7 +418,7 @@ SUITE(liz_lookaside_double_stack_test)
         
         liz_lookaside_double_stack_clear(&stack);
         
-        CHECK_EQUAL(true, liz_lookaside_double_stack_is_empty(&stack));
+        CHECK_EQUAL(0, liz_lookaside_double_stack_count_all(&stack));
         CHECK_EQUAL(4, liz_lookaside_double_stack_capacity(&stack));
     }
     
@@ -427,7 +429,7 @@ SUITE(liz_lookaside_double_stack_test)
         
         liz_lookaside_double_stack_clear(&stack);
         
-        CHECK_EQUAL(false, liz_lookaside_double_stack_is_empty(&stack));
+        CHECK_EQUAL(0, liz_lookaside_double_stack_count_all(&stack));
         CHECK_EQUAL(0, liz_lookaside_double_stack_capacity(&stack));
     }
     
@@ -439,7 +441,7 @@ SUITE(liz_lookaside_double_stack_test)
         liz_lookaside_double_stack_clear(&stack);
         
         
-        CHECK_EQUAL(true, liz_lookaside_double_stack_is_empty(&stack));
+        CHECK_EQUAL(0, liz_lookaside_double_stack_count_all(&stack));
         CHECK_EQUAL(4, liz_lookaside_double_stack_capacity(&stack));
     }
     
@@ -451,7 +453,7 @@ SUITE(liz_lookaside_double_stack_test)
         liz_lookaside_double_stack_clear(&stack);
         
         
-        CHECK_EQUAL(true, liz_lookaside_double_stack_is_empty(&stack));
+        CHECK_EQUAL(0, liz_lookaside_double_stack_count_all(&stack));
         CHECK_EQUAL(4, liz_lookaside_double_stack_capacity(&stack));
     }
     

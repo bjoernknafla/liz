@@ -180,27 +180,39 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
     
     liz_int_t kv_read_index = key_value_count - 1;
     liz_int_t kv_write_index = key_value_count - 1;
-    liz_int_t reorder_stack_top_index = -1;
     
     
-    while (0 < kv_read_index) {
-        LIZ_ASSERT(kv_read_index <= kv_write_index && "Writing must not overtake reading.");
-        LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[reorder_stack_top_index] && "Keys must be unique.");
+    while (0 <= kv_read_index) {
         
-        if (!liz_lookaside_stack_is_empty(&reorder_stack) 
-            && keys[kv_read_index] < key_reorder_stack[reorder_stack_top_index]) {
+        LIZ_ASSERT(kv_read_index <= kv_write_index && "Writing must not overtake reading.");
+        
+        if (0 != liz_lookaside_stack_count(&reorder_stack) 
+            && keys[kv_read_index] < key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)]) {
+            
+            LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
             
             // Move the key and value from the stack in place.
-            keys[kv_write_index] = key_reorder_stack[reorder_stack_top_index];
+            keys[kv_write_index] = key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)];
             liz_memcpy((char *)values + value_size_in_bytes * kv_write_index,
-                       (char *)value_reorder_stack + value_size_in_bytes * reorder_stack_top_index,
+                       (char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&reorder_stack),
                        value_size_in_bytes);
             
             liz_lookaside_stack_pop(&reorder_stack);
-            reorder_stack_top_index = liz_lookaside_stack_top_index(&reorder_stack);
             
             --kv_write_index;
-        } else if (keys[kv_read_index - 1] < keys[kv_read_index]) {
+        } else if (!liz_lookaside_stack_is_full(&reorder_stack)){
+            // Push the key and its value onto the stack.
+            liz_lookaside_stack_push(&reorder_stack);
+            
+            key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] = keys[kv_read_index];
+            liz_memcpy((char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&reorder_stack), 
+                       (char *)values + value_size_in_bytes * kv_read_index, 
+                       value_size_in_bytes);
+            
+            --kv_read_index;
+            
+            LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
+        }  else /* if (keys[kv_read_index - 1] < keys[kv_read_index]) */ {
             // Key and value are greater than their predecessor, so save the 
             // roundtrip to push and then pop them from the stack and move them
             // to their final position immediately.
@@ -216,22 +228,43 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             
             --kv_read_index;
             --kv_write_index;
-        } else {
-            // Push the key and its value onto the stack.
-            liz_lookaside_stack_push(&reorder_stack);
-            reorder_stack_top_index = liz_lookaside_stack_top_index(&reorder_stack);
+        } 
+    }
+    
+    /*
+    // Move elements from reorder stack greater than the last remaining element
+    // to read to their final position.
+    while (0 == kv_read_index) {
+        
+        if (0 != liz_lookaside_stack_count(&reorder_stack)
+            && keys[kv_read_index] < key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)]) {
+
+            LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
             
-            key_reorder_stack[reorder_stack_top_index] = keys[kv_read_index];
-            liz_memcpy((char *)value_reorder_stack + value_size_in_bytes * reorder_stack_top_index, 
-                       (char *)values + value_size_in_bytes * kv_read_index, 
+            keys[kv_write_index] = key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)];
+            liz_memcpy((char *)values + value_size_in_bytes * kv_write_index,
+                       (char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&reorder_stack),
                        value_size_in_bytes);
             
+            liz_lookaside_stack_pop(&reorder_stack);
+            
+            --kv_write_index;
+        } else {
+            
+            keys[kv_write_index] = keys[kv_read_index];
+            
+            liz_memmove((char *)values + value_size_in_bytes * kv_write_index,
+                        (char *)values + value_size_in_bytes * kv_read_index,
+                        value_size_in_bytes);
+            
             --kv_read_index;
+            --kv_write_index;
         }
     }
-
+    */
+    
     // All keys and values read, write what's left on the stack back.
-    LIZ_ASSERT(0 == liz_lookaside_stack_count(&reorder_stack) || kv_write_index + 1 == liz_lookaside_stack_count(&reorder_stack));
+    LIZ_ASSERT(kv_write_index + 1 == liz_lookaside_stack_count(&reorder_stack));
     liz_memcpy(keys, 
                key_reorder_stack, 
                sizeof(keys[0]) * liz_lookaside_stack_count(&reorder_stack));

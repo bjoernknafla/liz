@@ -102,12 +102,16 @@ extern "C" {
 
     
     
+    /* Commented out because semantics are irritating in use and unsure if 
+     * just testing for zero count isn't irritating for a zero capacity stack.
     LIZ_INLINE static
     bool
     liz_lookaside_stack_is_empty(liz_lookaside_stack_t const *stack)
     {
         return (0u == stack->count) && (0u < stack->capacity);
     }
+    */
+    
     
     
     LIZ_INLINE static
@@ -185,7 +189,7 @@ extern "C" {
     void
     liz_lookaside_stack_pop(liz_lookaside_stack_t *stack)
     {
-        LIZ_ASSERT(false == liz_lookaside_stack_is_empty(stack));
+        LIZ_ASSERT(0 != liz_lookaside_stack_count(stack));
         
         stack->count -= 1u;
     }
@@ -201,7 +205,7 @@ extern "C" {
     liz_int_t
     liz_lookaside_stack_top_index(liz_lookaside_stack_t const *stack)
     {
-        LIZ_ASSERT(false == liz_lookaside_stack_is_empty(stack));
+        LIZ_ASSERT(0 != liz_lookaside_stack_count(stack));
         
         return ((liz_int_t)stack->count) - 1u;
     }

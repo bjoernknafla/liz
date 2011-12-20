@@ -125,12 +125,15 @@ extern "C" {
     
     
     
+    /* Commented out because semantics are irritating in use and unsure if 
+     * just testing for zero count isn't irritating for a zero capacity stack.
     LIZ_INLINE static
     bool
     liz_lookaside_double_stack_is_empty(liz_lookaside_double_stack_t const *stack)
     {
         return (0u == stack->count_low) && (0u == stack->count_high) && (0u < stack->capacity);
     }
+    */
     
     
     
