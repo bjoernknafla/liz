@@ -1,0 +1,1145 @@
+/*
+ * Copyright (c) 2011, Bjoern Knafla
+ * http://www.bjoernknafla.com/
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ *
+ *   * Redistributions of source code must retain the above copyright 
+ *     notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above copyright 
+ *     notice, this list of conditions and the following disclaimer in the 
+ *     documentation and/or other materials provided with the distribution.
+ *   * Neither the name of Bjoern Knafla nor the names of its contributors may
+ *     be used to endorse or promote products derived from this software without
+ *     specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/**
+ * @file
+ *
+ * Checks vm helper functions - mainly cancellation helpers.
+ */
+
+#include <unittestpp.h>
+
+#include <cassert>
+#include <vector>
+
+#include <liz/liz_vm.h>
+
+#include "liz_test_helpers.h"
+
+
+
+SUITE(liz_vm_helpers_test)
+{
+    TEST(replace_an_empty_cancellation_range_with_another_empty_range) 
+    {
+        liz_vm_cancellation_range_t range = {0u, 0u};
+        
+        liz_vm_cancellation_range_adapt(&range, 7u, 7u);
+        
+        CHECK_EQUAL(7u, range.begin_index);
+        CHECK_EQUAL(7u, range.end_index);
+    }
+    
+    
+    
+    TEST(do_not_empty_cancellation_range)
+    {
+        liz_vm_cancellation_range_t range = {0u, 1u};
+        
+        liz_vm_cancellation_range_adapt(&range, 7u, 7u);
+        
+        CHECK_EQUAL(0u, range.begin_index);
+        CHECK_EQUAL(1u, range.end_index);
+    }
+    
+    
+    
+    TEST(grow_cancellation_range_to_the_left)
+    {
+        liz_vm_cancellation_range_t range = {3u, 5u};
+        
+        liz_vm_cancellation_range_adapt(&range, 4u, 7u);
+        
+        CHECK_EQUAL(3u, range.begin_index);
+        CHECK_EQUAL(7u, range.end_index);
+    }
+    
+    
+    
+    TEST(grow_cancellation_range_to_the_right)
+    {
+        liz_vm_cancellation_range_t range = {3u, 5u};
+        
+        liz_vm_cancellation_range_adapt(&range, 2u, 5u);
+        
+        CHECK_EQUAL(2u, range.begin_index);
+        CHECK_EQUAL(5u, range.end_index);
+    }
+    
+    
+    
+    TEST(grow_cancellation_range)
+    {
+        liz_vm_cancellation_range_t range = {3u, 5u};
+        
+        liz_vm_cancellation_range_adapt(&range, 1u, 7u);
+        
+        CHECK_EQUAL(1u, range.begin_index);
+        CHECK_EQUAL(7u, range.end_index);
+    }
+    
+    
+    
+    TEST(do_not_grow_cancellation_range) 
+    {
+        liz_vm_cancellation_range_t range = {3u, 4u};
+        
+        liz_vm_cancellation_range_adapt(&range, 3u, 3u);
+        
+        CHECK_EQUAL(3u, range.begin_index);
+        CHECK_EQUAL(4u, range.end_index);
+    }
+    
+    
+    
+    
+    
+    
+    
+    namespace {
+        
+        class rollback_test_fixture {
+        public:
+            rollback_test_fixture()
+            :   allocator()
+            ,   spec()
+            ,   atoms(7) // No persistent states need comparison so just a dummy.
+            ,   guard()
+            ,   expected_result_vm(NULL)
+            ,   proband_vm(NULL)
+            ,   expected_result_vm_comparator()
+            ,   proband_vm_comparator()
+            {
+                spec.shape_atom_count = static_cast<uint16_t>(atoms.size());
+                spec.immediate_action_function_count = 2;
+                spec.persistent_state_count = 0;
+                spec.decider_state_capacity = 2;
+                spec.action_state_capacity = 2;
+                spec.persistent_state_change_capacity = 0;
+                spec.decider_guard_capacity = 1;
+                spec.action_request_capacity = 3;
+                
+                guard.shape_atom_index = 6;
+                guard.end_index = 6;
+                guard.decider_state_rollback_marker = 0;
+                guard.action_launch_request_rollback_marker = 1;
+                guard.sequence_reached_child_index = 0;
+                guard.concurrent_execution_state = 0;
+                guard.type = liz_node_type_concurrent_decider;
+                
+                expected_result_vm = liz_vm_create(spec,
+                                                   &allocator, 
+                                                   &counting_alloc);
+                
+                
+                proband_vm = liz_vm_create(spec,
+                                           &allocator, 
+                                           &counting_alloc);
+                liz_lookaside_stack_set_count(&proband_vm->decider_state_stack_header, 
+                                              2);
+                liz_lookaside_double_stack_set_count(&proband_vm->action_request_stack_header,
+                                                     2, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+                liz_lookaside_double_stack_set_count(&proband_vm->action_request_stack_header,
+                                                     1, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
+                
+                
+                expected_result_vm_comparator.set(expected_result_vm,
+                                                  NULL, // No persistent states need comparison so just a dummy.
+                                                  0);
+                proband_vm_comparator.set(proband_vm,
+                                          NULL, // No persistent states need comparison so just a dummy.
+                                          0);
+            }
+            
+            
+            
+            virtual ~rollback_test_fixture()
+            {
+                liz_vm_destroy(proband_vm, 
+                               &allocator,
+                               &counting_dealloc);        
+                liz_vm_destroy(expected_result_vm, 
+                               &allocator,
+                               &counting_dealloc);
+                
+                assert(allocator.is_balanced());
+            }
+            
+            
+            
+            void
+            setup_guard_and_exepected_vm_for_rollback()
+            {
+                guard.decider_state_rollback_marker = 0;
+                guard.action_launch_request_rollback_marker = 1;
+                
+                liz_lookaside_stack_set_count(&expected_result_vm->decider_state_stack_header, 
+                                              0);
+                liz_lookaside_double_stack_set_count(&expected_result_vm->action_request_stack_header,
+                                                     1, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+                liz_lookaside_double_stack_set_count(&expected_result_vm->action_request_stack_header,
+                                                     1, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
+            }
+            
+            
+            
+            void
+            setup_guard_and_exepected_vm_for_no_rollback()
+            {
+                guard.decider_state_rollback_marker = 2;
+                guard.action_launch_request_rollback_marker = 2;
+                
+                liz_lookaside_stack_set_count(&expected_result_vm->decider_state_stack_header, 
+                                              2);
+                liz_lookaside_double_stack_set_count(&expected_result_vm->action_request_stack_header,
+                                                     2, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+                liz_lookaside_double_stack_set_count(&expected_result_vm->action_request_stack_header,
+                                                     1, 
+                                                     LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
+            }
+            
+            
+            counting_allocator allocator;
+            liz_shape_specification_t spec;
+            
+            std::vector<liz_shape_atom_t> atoms;
+            
+            liz_vm_decider_guard_t guard;
+            
+            liz_vm_t* expected_result_vm;
+            liz_vm_t* proband_vm;
+            
+            liz_vm_comparator expected_result_vm_comparator;
+            liz_vm_comparator proband_vm_comparator;
+            
+        private:
+            rollback_test_fixture(rollback_test_fixture const&); // = 0
+            rollback_test_fixture& operator=(rollback_test_fixture const&); // = 0
+        };
+        
+    } // Anonymous namespace
+    
+    
+    
+    TEST_FIXTURE(rollback_test_fixture, rollback_for_immediate_cancellation_with_no_rollback)
+    {
+        setup_guard_and_exepected_vm_for_no_rollback();
+        
+        liz_vm_cancel_immediately_by_guard(proband_vm,
+                                           &guard);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+    }
+    
+    
+    
+    TEST_FIXTURE(rollback_test_fixture, rollback_for_immediate_cancellation)
+    {
+        setup_guard_and_exepected_vm_for_rollback();
+        
+        liz_vm_cancel_immediately_by_guard(proband_vm,
+                                           &guard);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+    }
+    
+    
+    
+    
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_launching_deferred_action)
+    {
+        push_shape_deferred_action(42 /* Action id */, 
+                                   7 /* Resource id */);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        push_vm_action_state(target_select_proband,
+                             0 /* Shape atom index. */,
+                             liz_execution_state_launch);
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0 /* liz_time_t */, 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_running_deferred_action)
+    {
+        push_shape_deferred_action(42 /* Action id */, 
+                                   7 /* Resource id */);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        push_vm_action_state(target_select_proband,
+                             0 /* Shape atom index. */,
+                             liz_execution_state_running);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42 /* Action id */,
+                                      7 /* Resrouce id */,
+                                      0 /* Shape atom index */);
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0 /* liz_time_t */, 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_running_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        push_vm_action_state(target_select_proband,
+                             0 /* Shape atom index */,
+                             liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_identity1] = liz_execution_state_cancel;
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0 /* liz_time_t */, 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    /* Commented out because running 
+     * liz_vm_cancel_running_actions_from_current_update with an empty
+     * cancellation range is not allowed.
+     TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_empty_range)
+     {
+     push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+     );
+     push_shape_immediate_action(immediate_action_func_index_identity0);
+     push_shape_deferred_action(42, // action_id
+     7 // resource_id
+     );
+     
+     create_expected_result_and_proband_vms_for_shape();
+     
+     liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+     0,
+     0);
+     liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+     0,
+     0);
+     
+     
+     push_vm_action_state(target_select_both, 
+     1, // shape atom index
+     liz_execution_state_running);
+     push_vm_action_state(target_select_both, 
+     2, // shape atom index
+     liz_execution_state_running);
+     
+     expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+     proband_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+     
+     liz_vm_cancel_running_actions_from_current_update(proband_vm,
+     NULL,
+     proband_blackboard, 
+     0, // liz_time_t 
+     &actor,
+     &shape);
+     
+     CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+     CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+     }
+     */
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_no_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity0);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        /*
+        push_vm_action_state(target_select_both, 
+                             1, // shape atom index
+                             liz_execution_state_running);
+        push_vm_action_state(target_select_both, 
+                             2, // shape atom index
+                             liz_execution_state_running);
+        */
+        
+        expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        proband_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0, // liz_time_t 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_all_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity0);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        push_vm_action_state(target_select_proband, 
+                             1, // shape atom index
+                             liz_execution_state_running);
+        push_vm_action_state(target_select_proband, 
+                             2, // shape atom index
+                             liz_execution_state_running);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action id
+                                      7, // resource id
+                                      2 // shape atom index
+                                      );
+        
+        expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_cancel;
+        proband_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0, // liz_time_t 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_current_update_few_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        push_vm_action_state(target_select_proband, 
+                             2, // shape atom index
+                             liz_execution_state_running);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action id
+                                      7, // resource id
+                                      2 // shape atom index
+                                      );
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          NULL,
+                                                          proband_blackboard, 
+                                                          0, // liz_time_t 
+                                                          &actor,
+                                                          &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    namespace {
+        
+        struct monitor_log_entry {
+            uint16_t node_shape_atom_index;
+            liz_uint_t traversal_mask;
+            liz_vm_t const *vm;
+            void const* actor_blackboard;
+            liz_time_t time;
+            liz_vm_actor_t const *actor;
+            liz_vm_shape_t const *shape;
+        };
+        
+        
+        bool
+        operator==(monitor_log_entry const& lhs, monitor_log_entry const& rhs)
+        {
+            bool const result = (lhs.node_shape_atom_index == rhs.node_shape_atom_index
+                                 && lhs.traversal_mask == rhs.traversal_mask
+                                 && lhs.vm == rhs.vm
+                                 && lhs.actor_blackboard == rhs.actor_blackboard
+                                 && lhs.time == rhs.time
+                                 && lhs.actor == rhs.actor
+                                 && lhs.shape == rhs.shape);
+            
+            return result;
+        }
+        
+        inline
+        UnitTest::MemoryOutStream& 
+        operator<<(UnitTest::MemoryOutStream& mos, monitor_log_entry const& entry) 
+        {
+            mos << "{node_shape_atom_index: " << entry.node_shape_atom_index;
+            mos << " traversal_mask: " << entry.traversal_mask;
+            mos << " vm: " << entry.vm;
+            mos << " actor_blackboard: " << entry.actor_blackboard;
+            mos << " time: " << entry.time;
+            mos << " actor: " << entry.actor;
+            mos << " shape: " << entry.shape;
+            mos << "}";
+            
+            return mos;
+        }
+        
+        typedef std::vector<monitor_log_entry> monitor_log;
+        
+        
+        inline
+        UnitTest::MemoryOutStream& 
+        operator<<(UnitTest::MemoryOutStream& mos, monitor_log const& log) 
+        {
+            char const* separator = "";
+            mos << "[";
+            for (std::size_t i = 0; i < log.size(); ++i) {
+                mos << separator << log[i];
+                separator = ", ";
+            }
+            mos << "]";
+            
+            
+            return mos;
+        }
+        
+        
+        void monitor_test_func(uintptr_t user_data,
+                               uint16_t const node_shape_atom_index,
+                               liz_uint_t const traversal_mask,
+                               liz_vm_t const *vm,
+                               void const * LIZ_RESTRICT actor_blackboard,
+                               liz_time_t const time,
+                               liz_vm_actor_t const *actor,
+                               liz_vm_shape_t const *shape)
+        {
+            monitor_log* log = reinterpret_cast<monitor_log*>(user_data);
+            
+            monitor_log_entry entry = {
+                node_shape_atom_index,
+                traversal_mask,
+                vm,
+                actor_blackboard,
+                time,
+                actor,
+                shape
+            };
+            
+            log->push_back(entry);
+        }
+        
+    } // anonymous namespace
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, monitor_cancel_running_actions_from_current_update_few_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        2,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        2,
+                                        4);
+        
+        push_vm_action_state(target_select_both, 
+                             1, // shape atom index
+                             liz_execution_state_running);
+        
+        push_vm_action_state(target_select_proband, 
+                             2, // shape atom index
+                             liz_execution_state_running);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      2 //  shape_atom_index
+                                      );
+        
+        
+        monitor_log expected_log;
+        
+#if defined(LIZ_VM_MONITOR_ENABLE)
+        expected_log.push_back((monitor_log_entry) {
+            2,
+            liz_vm_monitor_node_flag_enter_from_top | liz_vm_monitor_node_flag_cancel_action,
+            proband_vm,
+            proband_blackboard,
+            0, // liz_time_t
+            &actor,
+            &shape
+        });
+        expected_log.push_back((monitor_log_entry) {
+            2,
+            liz_vm_monitor_node_flag_leave_to_top | liz_vm_monitor_node_flag_cancel_action,
+            proband_vm,
+            proband_blackboard,
+            0, // liz_time_t
+            &actor,
+            &shape
+        });
+#endif
+        
+        monitor_log proband_log;
+        
+        liz_vm_monitor_t monitor = {
+            reinterpret_cast<uintptr_t>(&proband_log),
+            monitor_test_func
+        };
+        
+        liz_vm_cancel_running_actions_from_current_update(proband_vm,
+                                                          &monitor,
+                                                          proband_blackboard, 
+                                                          0, // liz_time_t 
+                                                          &actor,
+                                                          &shape);
+        
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+        CHECK_EQUAL(expected_log, proband_log);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_launching_deferred_action)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_launch);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        
+        expected_result_vm->actor_action_state_index = 1;
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      0 // shape_atom_index
+                                      );
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+        
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_running_deferred_action)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_running);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        
+        expected_result_vm->actor_action_state_index = 1;
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      0 // shape_atom_index
+                                      );
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_running_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_running);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        
+        expected_result_vm->actor_action_state_index = 1;
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        1);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        1);
+        
+        expected_result_blackboard[immediate_action_func_index_identity1] = liz_execution_state_cancel;
+        
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    /**
+     * Calling liz_vm_cancel_launched_and_running_actions_from_previous_update
+     * with an empty cancellation range results in undefined behavior.
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_empty_range)
+    {
+        CHECK(false);
+    }
+    */
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_no_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity0);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        proband_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_no_states_to_index_left)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity0);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(1, // shape atom index
+                                liz_execution_state_running);
+        
+        expected_result_vm->actor_action_state_index = 1;
+        proband_vm->actor_action_state_index = 1;
+        
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        proband_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_all_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(1, // shape_atom_index
+                                liz_execution_state_running);
+        push_actor_action_state(2, // shape_atom_index
+                                liz_execution_state_running);
+        
+        expected_result_vm->actor_action_state_index = 2;
+        
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        expected_result_blackboard[immediate_action_func_index_identity1] = liz_execution_state_cancel;
+        proband_blackboard[immediate_action_func_index_identity1] = liz_execution_state_running;
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      2 // shape_atom_index
+                                      );
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_few_states_to_index_left)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(1, // shape_atom_index
+                                liz_execution_state_running);
+        push_actor_action_state(2, // shape_atom_index
+                                liz_execution_state_running);
+        
+        expected_result_vm->actor_action_state_index = 2;
+        proband_vm->actor_action_state_index = 1;
+        
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        4);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      2 // shape_atom_index
+                                      );
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, cancel_running_actions_from_previous_update_few_states_in_range)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(1, // shape_atom_index
+                                liz_execution_state_running);
+        push_actor_action_state(2, // shape_atom_index
+                                liz_execution_state_running);
+        
+        expected_result_vm->actor_action_state_index = 1;
+        
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        0,
+                                        2);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        0,
+                                        2);
+        
+        expected_result_blackboard[immediate_action_func_index_identity1] = liz_execution_state_cancel;
+        proband_blackboard[immediate_action_func_index_identity1] = liz_execution_state_running;
+        
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        NULL,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);   
+    }
+    
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, monitor_cancel_running_actions_from_previous_update_few_states)
+    {
+        push_shape_concurrent_decider(4 // Shape stream with 4 atoms.
+                                      );
+        push_shape_immediate_action(immediate_action_func_index_identity1);
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   ); // Adds two shape atoms.
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_cancellation_range_adapt(&expected_result_vm->cancellation_range,
+                                        2,
+                                        4);
+        liz_vm_cancellation_range_adapt(&proband_vm->cancellation_range,
+                                        2,
+                                        4);
+        
+        push_actor_action_state(1, // shape atom index
+                                liz_execution_state_running);
+        
+        push_actor_action_state(2, // shape atom index
+                                liz_execution_state_running);
+        
+        push_vm_action_cancel_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      2 //  shape_atom_index
+                                      );
+        
+        
+        expected_result_vm->actor_action_state_index = 2;
+        
+        monitor_log expected_log;
+        
+#if defined(LIZ_VM_MONITOR_ENABLE)
+        expected_log.push_back((monitor_log_entry) {
+            2,
+            liz_vm_monitor_node_flag_enter_from_top | liz_vm_monitor_node_flag_cancel_action,
+            proband_vm,
+            proband_blackboard,
+            0, // liz_time_t
+            &actor,
+            &shape
+        });
+        expected_log.push_back((monitor_log_entry) {
+            2,
+            liz_vm_monitor_node_flag_leave_to_top | liz_vm_monitor_node_flag_cancel_action,
+            proband_vm,
+            proband_blackboard,
+            0, // liz_time_t
+            &actor,
+            &shape
+        });
+#endif
+        
+        monitor_log proband_log;
+        
+        liz_vm_monitor_t monitor = {
+            reinterpret_cast<uintptr_t>(&proband_log),
+            monitor_test_func
+        };
+        
+        liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
+                                                                        &monitor,
+                                                                        proband_blackboard, 
+                                                                        0, // liz_time_t 
+                                                                        &actor,
+                                                                        &shape);
+        
+        
+        CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
+        CHECK_EQUAL(expected_log, proband_log);
+    }
+}

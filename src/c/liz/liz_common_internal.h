@@ -33,6 +33,12 @@
  * @file
  *
  * Common types and helper functions used to implement liz.
+ *
+ * TODO: @todo Check and ensure that all uses of unions, e.g., 
+ *             liz_persistent_state_t and liz_shape_atom_t initialize/set the 
+ *             padding to zero to increase the possibility for comparisons
+ *             without knowing the type of the union (which is not portable
+ *             or standard conform to be true).
  */
 
 #ifndef LIZ_liz_common_internal_H
@@ -202,7 +208,10 @@ extern "C" {
     
     typedef union liz_persistent_state {
         uint64_t size_and_alignment_dummy;
-        uint8_t persistent_action_state;
+        struct {
+            uint8_t state;
+            char padding[7];
+        } persistent_action;
     } liz_persistent_state_t;
     
     
@@ -221,7 +230,55 @@ extern "C" {
     liz_max(liz_int_t const lhs, liz_int_t const rhs) 
     {
         return lhs > rhs ? lhs : rhs;
-    }
+    }    
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_immediate_action(liz_shape_atom_t *atoms,
+                                               liz_int_t *index,
+                                               liz_int_t capacity,
+                                               uint16_t immediate_action_function_index);
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_deferred_action(liz_shape_atom_t *atoms,
+                                              liz_int_t *index,
+                                              liz_int_t capacity,
+                                              uint32_t action_id,
+                                              uint16_t resource_id);
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_persistent_action(liz_shape_atom_t *atoms,
+                                                liz_int_t *index,
+                                                liz_int_t capacity);
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_sequence_decider(liz_shape_atom_t *atoms,
+                                               liz_int_t *index,
+                                               liz_int_t capacity,
+                                               uint16_t end_offset);
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_dynamic_priority_decider(liz_shape_atom_t *atoms,
+                                                       liz_int_t *index,
+                                                       liz_int_t capacity,
+                                                       uint16_t end_offset);
+    
+    
+    
+    void
+    liz_shape_atom_stream_add_concurrent_decider(liz_shape_atom_t *atoms,
+                                                 liz_int_t *index,
+                                                 liz_int_t capacity,
+                                                 uint16_t end_offset);
     
     
     

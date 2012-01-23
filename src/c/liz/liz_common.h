@@ -133,12 +133,15 @@ extern "C" {
      *
      * TODO: @todo Decide if actor_blackboard should be const.
      * TODO: @todo Decide if to dissallow continuing/running immediate actions.
+     * TODO: @todo Decide if to add LIZ_RESTRICT to the function signature.
      */
     typedef liz_execution_state_t (*liz_immediate_action_func_t)(void *actor_blackboard,
                                                                  liz_random_number_seed_t *random_number_placeholder,
                                                                  liz_time_t time_placeholder,
                                                                  liz_execution_state_t execution_request);
     
+
+#define LIZ_COUNT_MAX ((uint16_t)(~((uint16_t)0u)))
     
     /**
      * Item counts and buffer sizes needed to store actor data and process a

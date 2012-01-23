@@ -33,77 +33,970 @@
 /**
  * @file
  *
- * Checks the vm.
+ * Checks vm functions.
  */
 
 #include <unittestpp.h>
 
+#include <cassert>
+#include <vector>
+
+#include <liz/liz_common.h>
+#include <liz/liz_common_internal.h>
 #include <liz/liz_vm.h>
+
+#include "liz_test_helpers.h"
+
+
 
 SUITE(liz_vm_test)
 {
-    TEST(replace_an_empty_cancellation_range_with_another_empty_range) 
+    TEST(create_and_detroy_vm)
     {
-        liz_vm_cancellation_range_t range = {0u, 0u};
+        counting_allocator allocator;
         
-        liz_vm_cancellation_range_adapt(&range, 7u, 7u);
+        liz_shape_specification_t vm_spec = {
+            2,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0
+        };        
+        liz_vm_t *vm = liz_vm_create(vm_spec,
+                                     &allocator,
+                                     counting_alloc);
         
-        CHECK_EQUAL(7u, range.begin_index);
-        CHECK_EQUAL(7u, range.end_index);
+        CHECK(NULL != vm);
+        
+        liz_vm_destroy(vm,
+                       &allocator,
+                       counting_dealloc);
+        
+        CHECK(allocator.is_balanced());
     }
     
     
-    TEST(do_not_empty_cancellation_range)
+    TEST(vm_does_not_fulfill_shape_requirements)
     {
-        liz_vm_cancellation_range_t range = {0u, 1u};
+        counting_allocator allocator;
         
-        liz_vm_cancellation_range_adapt(&range, 7u, 7u);
+        liz_shape_specification_t vm_spec = {
+            2,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0
+        };
         
-        CHECK_EQUAL(0u, range.begin_index);
-        CHECK_EQUAL(1u, range.end_index);
+        liz_shape_specification_t too_large_spec = {
+            2,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+        };
+        
+        liz_vm_t *vm = liz_vm_create(vm_spec,
+                                     &allocator,
+                                     counting_alloc);
+        
+        
+        CHECK(false == liz_vm_fulfills_shape_specification(vm, too_large_spec));
+        
+        
+        liz_vm_destroy(vm,
+                       &allocator,
+                       counting_dealloc);
     }
     
-    TEST(grow_cancellation_range_to_the_left)
+    TEST(vm_fulfills_shape_requirements)
     {
-        liz_vm_cancellation_range_t range = {3u, 5u};
+        counting_allocator allocator;
         
-        liz_vm_cancellation_range_adapt(&range, 4u, 7u);
+        liz_shape_specification_t vm_spec = {
+            3,
+            1,
+            0,
+            1,
+            2,
+            0,
+            1,
+            1
+        };
         
-        CHECK_EQUAL(3u, range.begin_index);
-        CHECK_EQUAL(7u, range.end_index);
+        liz_shape_specification_t lesser_spec = {
+            2,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1
+        };
+        
+        liz_vm_t *vm = liz_vm_create(vm_spec,
+                                     &allocator,
+                                     counting_alloc);
+        
+        
+        CHECK(liz_vm_fulfills_shape_specification(vm, lesser_spec));
+        
+        
+        liz_vm_destroy(vm,
+                       &allocator,
+                       counting_dealloc);
+    }
+    
+    
+    namespace {
+        
+        
+        liz_vm_monitor_t *monitor_null = NULL;
+        void* user_data_lookup_context_null = NULL;
+        liz_time_t const update_time_zero = 0;
+        
+        
+        
+        void*
+        idenity_user_data_lookup_func(void *context,
+                                      uintptr_t user_data)
+        {
+            (void)context;
+            return reinterpret_cast<void*>(user_data);
+        }
+        
+        
+    } // anonymous namespace
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_running2);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_vm_action_state(target_select_expected_result,
+                             0, // shape_atom_index
+                             liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_running2] = liz_execution_state_running;
+        
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, run_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_identity0);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_running);
+        
+        push_vm_action_state(target_select_expected_result,
+                             0, // shape_atom_index
+                             liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_identity0] = liz_execution_state_running;
+        
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, terminate_successful_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_success3] = liz_execution_state_success;
+        
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_success, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, terminate_failing_immediate_action)
+    {
+        push_shape_immediate_action(immediate_action_func_index_fail4);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        expected_result_blackboard[immediate_action_func_index_fail4] = liz_execution_state_fail;
+        
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_fail, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_deferred_action)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_vm_action_state(target_select_expected_result,
+                             0, // shape_atom_index
+                             liz_execution_state_launch);
+        
+        push_vm_action_launch_request(target_select_expected_result,
+                                      42, // action_id
+                                      7, // resource_id
+                                      0 // shape_atom_index
+                                      );
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_launch, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, run_deferred_action_launched_before)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_vm_action_state(target_select_both,
+                             0, // shape_atom_index
+                             liz_execution_state_running);
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_launch);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, run_deferred_action_running_before)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_vm_action_state(target_select_both,
+                             0, // shape_atom_index
+                             liz_execution_state_running);
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_running);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, terminate_successful_deferred_action)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_success);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_success, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, terminate_failing_deferred_action)
+    {
+        push_shape_deferred_action(42, // action_id
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(0, // shape_atom_index
+                                liz_execution_state_fail);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_fail, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, tick_persistent_action)
+    {
+        push_shape_persistent_action();
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // index of persistent state in actor
+                                   0, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_success, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_successfully_terminating_sequence_decider)
+    {
+        push_shape_sequence_decider(2 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_success, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_terminating_sequence_decider_failing_on_first_child)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_fail);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_fail, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_terminating_sequence_decider_failing_on_middle_child)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_fail4);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        expected_result_blackboard[immediate_action_func_index_fail4] = liz_execution_state_fail;
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_fail, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_terminating_sequence_decider_failing_on_last_child)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        push_actor_action_state(3, // shape_atom_index
+                                liz_execution_state_fail);
+        
+        expected_result_blackboard[immediate_action_func_index_success3] = liz_execution_state_success;
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_fail, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_sequence_decider_with_first_child_returning_running)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_running);
+        
+        push_actor_action_state(3, // shape_atom_index
+                                liz_execution_state_fail);
+        
+        push_vm_decider_state(target_select_expected_result,
+                              0, // shape_atom_index
+                              1 // reached child state
+                              );
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_sequence_decider_with_middle_child_returning_running)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_running2);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        push_actor_action_state(3, // shape_atom_index
+                                liz_execution_state_fail);
+        
+        push_vm_decider_state(target_select_expected_result,
+                              0, // shape_atom_index
+                              2 // reached child state
+                              );
+        
+        push_vm_action_state(target_select_expected_result,
+                             2,
+                             liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_running2] = liz_execution_state_running;
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, launch_sequence_decider_with_last_child_returning_running)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        push_actor_action_state(3, // shape_atom_index
+                                liz_execution_state_running);
+        
+        push_vm_decider_state(target_select_expected_result,
+                              0, // shape_atom_index
+                              3 // reached child state
+                              );
+        
+        push_vm_action_state(target_select_expected_result,
+                             3,
+                             liz_execution_state_running);
+        
+        expected_result_blackboard[immediate_action_func_index_success3] = liz_execution_state_success;
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_running, proband_vm->execution_state);
+    }
+    
+    
+    TEST_FIXTURE(liz_vm_test_fixture, run_successfully_terminating_sequence_decider)
+    {
+        push_shape_sequence_decider(5 // shape atom end offset
+                                    );
+        push_shape_persistent_action();
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        push_shape_deferred_action(42, // action_ud
+                                   7 // resource_id
+                                   );
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        set_actor_persistent_state(0, // persistent state index
+                                   1, // shape_atom_index
+                                   liz_execution_state_success);
+        
+        push_actor_action_state(3, // shape_atom_index
+                                liz_execution_state_success);
+        
+        expected_result_blackboard[immediate_action_func_index_success3] = liz_execution_state_success;
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &actor,
+                            &shape);
+        
+        CHECK_EQUAL(expected_result_vm_extractable_state_comparator, 
+                    proband_vm_extractable_state_comparator);
+        CHECK_ARRAY_EQUAL(expected_result_blackboard, 
+                          proband_blackboard, 
+                          shape_immediate_action_function_count);
+        CHECK_EQUAL(liz_execution_state_success, proband_vm->execution_state);
     }
     
     
     
-    TEST(grow_cancellation_range_to_the_right)
+    TEST(launch_dynamic_priority_decider_with_first_child_succeeding)
     {
-        liz_vm_cancellation_range_t range = {3u, 5u};
         
-        liz_vm_cancellation_range_adapt(&range, 2u, 5u);
-        
-        CHECK_EQUAL(2u, range.begin_index);
-        CHECK_EQUAL(5u, range.end_index);
     }
     
     
-    TEST(grow_cancellation_range)
+    TEST(launch_dynamic_priority_decider_with_middle_child_succeeding)
     {
-        liz_vm_cancellation_range_t range = {3u, 5u};
         
-        liz_vm_cancellation_range_adapt(&range, 1u, 7u);
-        
-        CHECK_EQUAL(1u, range.begin_index);
-        CHECK_EQUAL(7u, range.end_index);
     }
     
     
-    TEST(do_not_grow_cancellation_range) 
+    TEST(launch_dynamic_priority_decider_with_last_child_succeeding)
     {
-        liz_vm_cancellation_range_t range = {3u, 4u};
         
-        liz_vm_cancellation_range_adapt(&range, 3u, 3u);
-        
-        CHECK_EQUAL(3u, range.begin_index);
-        CHECK_EQUAL(4u, range.end_index);
     }
-}
+    
+    
+    TEST(launch_dynamic_priority_decider_with_all_children_failing)
+    {
+        
+    }
+    
+    TEST(launch_dynamic_priority_decider_with_first_child_returning_running)
+    {
+        
+    }
+    
+    
+    TEST(launch_dynamic_priority_decider_with_middle_child_returning_running)
+    {
+        
+    }
+    
+    
+    TEST(launch_dynamic_priority_decider_with_last_child_returning_running)
+    {
+        
+    }
+    
+    
+    TEST(run_dynamic_priority_decider_a_child_succeeding)
+    {
+        
+    }
+    
+    
+    TEST(launch_succeeding_concurrent_decider)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_first_child_failing)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_middle_child_failing)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_last_child_failing)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_all_children_succeeding)
+    {
+        
+    }
+    
+    TEST(launch_concurrent_decider_with_a_child_returning_running)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_all_children_returning_running)
+    {
+        
+    }
+    
+    
+    TEST(launch_concurrent_decider_with_succeeding_running_and_failing_children)
+    {
+        
+    }
+    
+    TEST(run_succeeding_concurrent_decider)
+    {
+        
+    }
+    
+    
+    TEST(cancel_without_running_actions)
+    {
+        
+    }
+    
+    
+    TEST(cancel_immediate_action)
+    {
+        
+    }
+    
+    
+    TEST(cancel_launched_deferred_action)
+    {
+        
+    }
+    
+    
+    TEST(cancel_running_deferred_action)
+    {
+        
+    }
+    
+    
+    TEST(cancel_multiple_active_actions)
+    {
+        
+    }
+    
+    
+    TEST(extract_empty_actor_state)
+    {
+        
+    }
+    
+    
+    TEST(extract_capacity_sized_actor_state)
+    {
+        
+    }
+    
+    
+    TEST(extract_empty_requests)
+    {
+        
+    }
+    
+    TEST(extract_action_launch_requests)
+    {
+        
+    }
+    
+    
+    TEST(extract_action_cancel_requests)
+    {
+        
+    }
+    
+    
+    TEST(extract_action_requests)
+    {
+        
+    }
+    
+    
+    TEST(extract_full_capacity_action_requests)
+    {
+        
+    }
+    
+    
+    TEST(monitor_action_enter)
+    {
+        
+    }
+    
+    
+    TEST(monitor_action_leave)
+    {
+        
+    }
+    
+    
+    TEST(monitor_action_cancellation)
+    {
+        
+    }
+    
+    
+    TEST(monitor_decider_enter_from_top)
+    {
+        
+    }
+    
+    
+    TEST(monitor_decider_enter_from_bottom)
+    {
+        
+    }
+    
+    
+    TEST(monitor_decider_leave_to_bottom)
+    {
+        
+    }
+    
+    
+    TEST(monitor_decider_leave_to_top)
+    {
+        
+    }
+    
+} // SUITE(liz_vm_test)

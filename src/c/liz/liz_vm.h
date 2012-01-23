@@ -157,8 +157,8 @@ extern "C" {
      */
     typedef struct liz_vm_action_request {
         uint32_t action_id;
-        uint16_t resource;
-        uint16_t shape_item_index;
+        uint16_t resource_id;
+        uint16_t shape_atom_index;
     } liz_vm_action_request_t;
     
     
@@ -182,7 +182,7 @@ extern "C" {
      *
      * When adding rollback markers for immediately cancelable states and 
      * requestsalso add rollback handling to 
-     * liz_vm_rollback_immediately_cancelable_states_and_requests.
+     * liz_vm_cancel_immediately_by_guard.
      */
     typedef struct liz_vm_decider_guard {
         uint16_t shape_atom_index;
@@ -201,7 +201,7 @@ extern "C" {
         
         // 128 bit alas 16 byte padding to be usable as a reorder stack with
         // the right alignment for persistent state changes.
-        char padding_to_16_byte[4];
+        char padding_to_16_bytes[4];
     } liz_vm_decider_guard_t;
     
     
@@ -418,7 +418,9 @@ extern "C" {
     /**
      * Traverses an actor's behavior tree and updates the actor.
      *
-     * Call liz_vm_extract_action_requests to get the requests.
+     * Call liz_vm_extract_and_clear_actor_state afterwards to 
+     * Call liz_vm_extract_and_clear_action_requests afterwards to get the 
+     * requests.
      *
      * @attention Only call if  liz_vm_fulfills_shape_specification is true.
      */
@@ -428,14 +430,17 @@ extern "C" {
                         void * LIZ_RESTRICT user_data_lookup_context,
                         liz_vm_user_data_lookup_func_t user_data_lookup_func,
                         liz_time_t const time,
-                        liz_vm_actor_t *actor,
+                        liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape);
     
     
     /**
-     * Creates cancellation requests for all running actions of actor.
+     * Cancels running immediate actor and creates cancellation requests for its 
+     * active deferred actions.
      *
-     * Call liz_vm_extract_action_requests to get the requests.
+     * Call liz_vm_extract_and_clear_actor_state afterwards to 
+     * Call liz_vm_extract_and_clear_action_requests afterwards to get the 
+     * requests.
      *
      * @attention Only call if  liz_vm_fulfills_shape_specification is true.
      */
@@ -445,21 +450,36 @@ extern "C" {
                         void * LIZ_RESTRICT user_data_lookup_context,
                         liz_vm_user_data_lookup_func_t user_data_lookup_func,
                         liz_time_t const time,
-                        liz_vm_actor_t *actor,
+                        liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape);
     
     
+    
     /**
-     * Copies the action launch and cancel requests of the last update to
-     * external_requests.
+     * Replaces actor's state with the state aggregated in vm.
      *
-     * TODO: @todo Change function to allow chunk-wise extraction of requests.
+     * If the state in vm doesn't fit actor, then behavior is undefined.
      */
     void
-    liz_vm_extract_and_clear_action_requests(liz_vm_t *vm,
-                                             liz_action_request_t *external_requests,
-                                             liz_int_t const external_request_capacity,
-                                             liz_id_t const actor_id);
+    liz_vm_extract_actor_state(liz_vm_t const *vm,
+                               liz_vm_actor_t *target_actor,
+                               liz_vm_shape_t const *shape);
+    
+    
+    /**
+     * Copies the action launch and cancel requests of the last update from vm
+     * to external_requests and returns the number of copied requests.
+     *
+     * TODO: @todo Change function to allow chunk-wise extraction of requests.
+     *
+     * TODO: @todo Add a way to just copy the launch or cancel requests and ways
+     *             to query the different request counts.
+     */
+    liz_int_t
+    liz_vm_extract_action_requests(liz_vm_t const *vm,
+                                   liz_action_request_t *external_requests,
+                                   liz_int_t const external_request_capacity,
+                                   liz_id_t const actor_id);
     
     
     /**
@@ -484,14 +504,13 @@ extern "C" {
      * @attention Do not step invalid commands, e.g., do not call invoke 
      *            node if there is no valid node.
      */
-    liz_vm_cmd_t
-    liz_vm_step_cmd(liz_vm_t *vm,
-                    liz_vm_monitor_t *monitor,
-                    void * LIZ_RESTRICT actor_blackboard,
-                    liz_time_t const time,
-                    liz_vm_actor_t const *actor,
-                    liz_vm_shape_t const *shape,
-                    liz_vm_cmd_t const cmd);
+    void
+    liz_vm_step(liz_vm_t *vm,
+                liz_vm_monitor_t *monitor,
+                void * LIZ_RESTRICT actor_blackboard,
+                liz_time_t const time,
+                liz_vm_actor_t const *actor,
+                liz_vm_shape_t const *shape);
     
     
     /**
@@ -499,7 +518,7 @@ extern "C" {
      *
      * @attention Do not call without a valid node to invoke.
      */
-    liz_vm_cmd_t
+    void
     liz_vm_step_invoke_node(liz_vm_t *vm,
                             liz_vm_monitor_t *monitor,
                             void * LIZ_RESTRICT actor_blackboard,
@@ -512,7 +531,7 @@ extern "C" {
      * Re-enters a decider node from the bottom, alas calls the guard
      * associated with the decider.
      */
-    liz_vm_cmd_t
+    void
     liz_vm_step_guard_decider(liz_vm_t *vm,
                               liz_vm_monitor_t *monitor,
                               void * LIZ_RESTRICT actor_blackboard,
@@ -522,20 +541,13 @@ extern "C" {
     
     
     
-    liz_vm_cmd_t
+    void
     liz_vm_step_cleanup(liz_vm_t *vm,
                         liz_vm_monitor_t *monitor,
                         void * LIZ_RESTRICT actor_blackboard,
                         liz_time_t const time,
                         liz_vm_actor_t const *actor,
                         liz_vm_shape_t const *shape);
-    
-    
-    
-    void
-    liz_vm_extract_and_clear_actor_states(liz_vm_t *vm,
-                                          liz_vm_actor_t *actor,
-                                          liz_vm_shape_t const *shape);
     
     
     
@@ -618,18 +630,14 @@ extern "C" {
                 uint8_t *action_states,
                 liz_vm_decider_guard_t *decider_guards,
                 liz_vm_action_request_t *action_requests);
-    
-    
-    
-#define LIZ_VM_NEXT_STEP(vm) liz_vm_next_step(vm)
-    
+
     
     
     LIZ_INLINE static
     bool
-    liz_vm_next_step(liz_vm_t *vm) 
+    liz_vm_is_running(liz_vm_t const *vm) 
     {
-        LIZ_ASSERT(liz_vm_cmd_error == vm->cmd
+        LIZ_ASSERT(liz_vm_cmd_error != vm->cmd
                    && "Behavior tree shape is malformed, or a user supplied immediate action function returns invalid execution states, or invalid external action states were not catched when set for an actor, or an implementation error triggered the error.");
         
         return (liz_vm_cmd_done != vm->cmd) && (liz_vm_cmd_error != vm->cmd);
@@ -802,21 +810,6 @@ extern "C" {
             *exec_state = liz_execution_state_fail;
         }
     }
-    
-    
-    
-    LIZ_INLINE static
-    void
-    liz_vm_rollback_immediately_cancelable_states_and_requests(liz_vm_t *vm, 
-                                                               liz_vm_decider_guard_t const *guard)
-    {
-        liz_lookaside_stack_set_count(&vm->decider_state_stack_header, 
-                                      guard->decider_state_rollback_marker);
-        
-        liz_lookaside_double_stack_set_count(&vm->action_request_stack_header, 
-                                             guard->action_launch_request_rollback_marker, 
-                                             LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
-    }
 
     
     
@@ -824,7 +817,9 @@ extern "C" {
     bool
     liz_vm_cancellation_range_is_empty(liz_vm_cancellation_range_t const range)
     {
-        return range.begin_index == range.end_index;
+        bool const result = range.begin_index == range.end_index;
+        
+        return result;
     }
     
     
@@ -842,28 +837,34 @@ extern "C" {
                                     uint16_t const new_end_index);
     
     
+    /**
+     * Determines if shape_atom_index references an immediate or deferred action
+     * and calles the related cancellation function, see
+     * liz_vm_tick_immediate_action and liz_vm_launch_or_cancel_deferred_action.
+     */
+    void
+    liz_vm_cancel_immediate_or_deferred_action(void * LIZ_RESTRICT actor_blackboard,
+                                               liz_random_number_seed_t *rnd_seed,
+                                               liz_vm_action_request_t *deferred_action_requests,
+                                               liz_lookaside_double_stack_t *deferrec_action_request_stack_header,
+                                               liz_time_t const time,
+                                               liz_shape_atom_t const *shape_atoms,
+                                               liz_int_t const shape_atom_index,
+                                               liz_immediate_action_func_t const *immediate_action_functions,
+                                               liz_int_t const immediate_action_function_count);
     
-    LIZ_INLINE static
+    
+    /**
+     * Tick, a.k.a. launch, run, terminate, or cancel an immediate action.
+     */
     liz_execution_state_t
-    liz_vm_tick_immediate_action(liz_random_number_seed_t *rnd_seed,
-                                 void * LIZ_RESTRICT actor_blackboard,
+    liz_vm_tick_immediate_action(void * LIZ_RESTRICT actor_blackboard,
+                                 liz_random_number_seed_t *rnd_seed,
                                  liz_time_t const time,
                                  liz_execution_state_t const execution_request,
-                                 liz_shape_atom_t const *shape_atom_stream,
+                                 liz_shape_atom_t const *first_shape_atom_of_node_in_stream,
                                  liz_immediate_action_func_t const *immediate_action_functions,
-                                 liz_int_t const immediate_action_function_count)
-    {
-        LIZ_ASSERT(immediate_action_function_count > shape_atom_stream->immediate_action.function_index);
-        
-        liz_immediate_action_func_t const func = immediate_action_functions[shape_atom_stream->immediate_action.function_index];
-        liz_execution_state_t exec_state = func(actor_blackboard,
-                                                rnd_seed,
-                                                time,
-                                                execution_request);
-        LIZ_ASSERT(liz_execution_state_launch != exec_state && "Immediate actions must not return a launch statel, return running instead.");
-        
-        return exec_state;
-    }
+                                 liz_int_t const immediate_action_function_count);
     
     
     
@@ -874,27 +875,41 @@ extern "C" {
     liz_vm_launch_or_cancel_deferred_action(liz_vm_action_request_t *action_requests,
                                             liz_lookaside_double_stack_t *action_request_stack_header,
                                             liz_execution_state_t const execution_request,
-                                            liz_shape_atom_t const *action_begin_shape_atom,
+                                            liz_shape_atom_t const *shape_atoms,
                                             liz_int_t const shape_atom_index);
     
     
     
+    /**
+     * Called by a guard to roll back action launch requests and decider states 
+     * generated by guard children when the guard decides to cancel its 
+     * children.
+     *
+     * This form of cancellation happens immediately while running actions
+     * belonging to different guards are cancelled together just before the next
+     * action can be called, a.k.a. before behavior tree traversal descends 
+     * after ascending out of guarded nodes.
+     */
+    LIZ_INLINE static
     void
-    liz_vm_cancel_immediate_or_deferred_action(liz_random_number_seed_t *rnd_seed,
-                                               void * LIZ_RESTRICT actor_blackboard,
-                                               liz_vm_action_request_t *deferred_action_requests,
-                                               liz_lookaside_double_stack_t *deferrec_action_request_stack_header,
-                                               liz_time_t const time,
-                                               liz_shape_atom_t const *action_begin_shape_atom,
-                                               liz_int_t const shape_atom_index,
-                                               liz_immediate_action_func_t const *immediate_action_functions,
-                                               liz_int_t const immediate_action_function_count);
+    liz_vm_cancel_immediately_by_guard(liz_vm_t *vm, 
+                                       liz_vm_decider_guard_t const *guard)
+    {
+        liz_lookaside_stack_set_count(&vm->decider_state_stack_header, 
+                                      guard->decider_state_rollback_marker);
+        
+        liz_lookaside_double_stack_set_count(&vm->action_request_stack_header, 
+                                             guard->action_launch_request_rollback_marker, 
+                                             LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+    }
     
     
     
     /**
      * Cancel immediate and deferred actions that returned a running state
      * during the current update.
+     *
+     * @attention Do not call with an empty cancellation range in vm.
      */
     void
     liz_vm_cancel_running_actions_from_current_update(liz_vm_t *vm,
@@ -910,6 +925,8 @@ extern "C" {
      * Cancel immediate and deferred action with a running (or launching) state
      * from the previous update that have not been invoked during the current
      * update.
+     *
+     * @attention Do not call with an empty cancellation range in vm.
      */
     void
     liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,

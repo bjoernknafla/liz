@@ -41,6 +41,160 @@
 
 
 
+void
+liz_shape_atom_stream_add_immediate_action(liz_shape_atom_t *atoms,
+                                           liz_int_t *index,
+                                           liz_int_t capacity,
+                                           uint16_t immediate_action_function_index)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN <= capacity);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].immediate_action.type = (uint8_t)liz_node_type_immediate_action;
+    atoms[i].immediate_action.padding = 0u;
+    atoms[i].immediate_action.function_index = immediate_action_function_index;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
+
+void
+liz_shape_atom_stream_add_deferred_action(liz_shape_atom_t *atoms,
+                                          liz_int_t *index,
+                                          liz_int_t capacity,
+                                          uint32_t action_id,
+                                          uint16_t resource_id)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN <= capacity);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].deferred_action_first.type = (uint8_t)liz_node_type_deferred_action;
+    atoms[i].deferred_action_first.padding = 0u;
+    atoms[i].deferred_action_first.resource_id = resource_id;
+    
+    ++i;
+    
+    atoms[i].deferred_action_second.action_id = action_id;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
+
+void
+liz_shape_atom_stream_add_persistent_action(liz_shape_atom_t *atoms,
+                                            liz_int_t *index,
+                                            liz_int_t capacity)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN <= capacity);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].persistent_action.type = liz_node_type_persistent_action;
+    atoms[i].persistent_action.padding[0] = 0u;
+    atoms[i].persistent_action.padding[1] = 0u;
+    atoms[i].persistent_action.padding[2] = 0u;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
+
+void
+liz_shape_atom_stream_add_sequence_decider(liz_shape_atom_t *atoms,
+                                           liz_int_t *index,
+                                           liz_int_t capacity,
+                                           uint16_t end_offset)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + end_offset <= capacity);
+    LIZ_ASSERT(1u < end_offset);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].sequence_decider.type = liz_node_type_sequence_decider;
+    atoms[i].sequence_decider.padding = 0u;
+    atoms[i].sequence_decider.end_offset = end_offset;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
+
+void
+liz_shape_atom_stream_add_dynamic_priority_decider(liz_shape_atom_t *atoms,
+                                                   liz_int_t *index,
+                                                   liz_int_t capacity,
+                                                   uint16_t end_offset)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + end_offset <= capacity);
+    LIZ_ASSERT(1u < end_offset);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].dynamic_priority_decider.type = liz_node_type_dynamic_priority_decider;
+    atoms[i].dynamic_priority_decider.padding = 0u;
+    atoms[i].dynamic_priority_decider.end_offset = end_offset;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
+
+void
+liz_shape_atom_stream_add_concurrent_decider(liz_shape_atom_t *atoms,
+                                             liz_int_t *index,
+                                             liz_int_t capacity,
+                                             uint16_t end_offset)
+{
+    LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + end_offset <= capacity);
+    LIZ_ASSERT(1u < end_offset);
+    
+    liz_int_t i = *index;
+    
+    atoms[i].concurrent_decider.type = liz_node_type_concurrent_decider;
+    atoms[i].concurrent_decider.padding = 0u;
+    atoms[i].concurrent_decider.end_offset = end_offset;
+    
+    ++i;
+    
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN);
+    
+    *index = i;
+}
+
+
 
 liz_shape_specification_t
 liz_shape_specification_merge_max(liz_shape_specification_t lhs,
@@ -212,12 +366,11 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             --kv_read_index;
             
             LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
-        }  else /* if (keys[kv_read_index - 1] < keys[kv_read_index]) */ {
-            // Key and value are greater than their predecessor, so save the 
-            // roundtrip to push and then pop them from the stack and move them
-            // to their final position immediately.
-            // This step also prevents pushing of leaves for which there might
-            // be no space on the stack.
+        }  else {
+            // Reached for leaves when the stack that only covers inner nodes
+            // aka branches is full. Leaves are always ordered correctly in 
+            // regard to other leaves. Only post-order emitted decider values
+            // need reordering in regard to other keys and values.
             keys[kv_write_index] = keys[kv_read_index];
             
             // read and write indices are equal for an already sorted list, 
@@ -230,38 +383,6 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             --kv_write_index;
         } 
     }
-    
-    /*
-    // Move elements from reorder stack greater than the last remaining element
-    // to read to their final position.
-    while (0 == kv_read_index) {
-        
-        if (0 != liz_lookaside_stack_count(&reorder_stack)
-            && keys[kv_read_index] < key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)]) {
-
-            LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
-            
-            keys[kv_write_index] = key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)];
-            liz_memcpy((char *)values + value_size_in_bytes * kv_write_index,
-                       (char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&reorder_stack),
-                       value_size_in_bytes);
-            
-            liz_lookaside_stack_pop(&reorder_stack);
-            
-            --kv_write_index;
-        } else {
-            
-            keys[kv_write_index] = keys[kv_read_index];
-            
-            liz_memmove((char *)values + value_size_in_bytes * kv_write_index,
-                        (char *)values + value_size_in_bytes * kv_read_index,
-                        value_size_in_bytes);
-            
-            --kv_read_index;
-            --kv_write_index;
-        }
-    }
-    */
     
     // All keys and values read, write what's left on the stack back.
     LIZ_ASSERT(kv_write_index + 1 == liz_lookaside_stack_count(&reorder_stack));
