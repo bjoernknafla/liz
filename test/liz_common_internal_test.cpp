@@ -47,173 +47,34 @@
 
 SUITE(liz_common_internal_test)
 {
-    TEST(sort_decider_states_empty)
+    TEST(apply_no_persistent_state_changes_to_no_persistent_states)
     {
-        liz_int_t const state_count = 0;
-        liz_int_t const stack_capacity = 0;
-        
-        uint16_t const expected_states[state_count] = {};
-        uint16_t const expected_state_shape_atom_indices[state_count] = {};
-        
-        uint16_t states[state_count] = {};
-        uint16_t state_shape_atom_indices[state_count] = {};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+        CHECK(false);
     }
     
     
-    
-    TEST(sort_decider_states_single_element)
+    TEST(apply_empty_persistent_state_changes)
     {
-        liz_int_t const state_count = 1;
-        liz_int_t const stack_capacity = 0;
-        
-        uint16_t expected_states[state_count] = {42u};
-        uint16_t expected_state_shape_atom_indices[state_count] = {7u};
-        
-        uint16_t states[state_count] = {42u};
-        uint16_t state_shape_atom_indices[state_count] = {7u};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-        
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
-    }
-   
-    
-    
-    TEST(sort_decider_states_already_ordered)
-    {
-        liz_int_t const state_count = 3;
-        liz_int_t const stack_capacity = 1;
-        
-        uint16_t expected_states[state_count] = {5u, 4u, 3u};
-        uint16_t expected_state_shape_atom_indices[state_count] = {0u, 1u, 2u};
-        
-        uint16_t states[state_count] = {5u, 4u, 3u};
-        uint16_t state_shape_atom_indices[state_count] = {0u, 1u, 2u};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-        
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+        CHECK(false);
     }
     
     
-    
-    TEST(sort_decider_states_single_sequence_unordered)
+    TEST(apply_one_persistent_state_change)
     {
-        liz_int_t const state_count = 3;
-        liz_int_t const stack_capacity = 2;
-        
-        uint16_t expected_states[state_count] = {103u, 102u, 101u};
-        uint16_t expected_state_shape_atom_indices[state_count] = {7u, 23u, 42u};
-        
-        uint16_t states[state_count] = {101u, 102u, 103u};
-        uint16_t state_shape_atom_indices[state_count] = {42u, 23u, 7u};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-        
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+        CHECK(false);
     }
     
     
-    
-    TEST(sort_decider_states_single_sequence_unordered_without_first_key_as_last_element)
+    TEST(apply_multiple_persistent_state_changes)
     {
-        liz_int_t const state_count = 6;
-        liz_int_t const stack_capacity = 3;
-        
-        uint16_t expected_states[state_count] = {105u, 104u, 103u, 102u, 101u, 100u};
-        uint16_t expected_state_shape_atom_indices[state_count] = {1u, 2u, 3u, 4u, 6u, 7u};
-        
-        uint16_t states[state_count] = {105u, 104u, 102u, 103u, 100u, 101u};
-        uint16_t state_shape_atom_indices[state_count] = {1u, 2u, 4u, 3u, 7u, 6u};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-        
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+        CHECK(false);
     }
     
     
-    
-    TEST(sort_decider_states_sequences_in_sequence_unordered)
+    TEST(apply_persistent_state_changes_to_all_states)
     {
-        liz_int_t const state_count = 8;
-        liz_int_t const stack_capacity = 3;
-        
-        uint16_t expected_states[state_count] = {107u, 106u, 105u, 104u, 103u, 102u, 101u, 100u};
-        uint16_t expected_state_shape_atom_indices[state_count] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u};
-        
-        uint16_t states[state_count] = {105u, 104u, 106u, 101u, 100u, 102u, 103u, 107u};
-        uint16_t state_shape_atom_indices[state_count] = {2u, 3u, 1u, 6u, 7u, 5u, 4u, 0u};
-        
-        uint16_t state_stack[stack_capacity] = {};
-        uint16_t state_shape_atom_indices_stack[stack_capacity] = {};
-        
-        liz_sort_values_for_keys_from_post_order_traversal(states,
-                                                           state_shape_atom_indices, 
-                                                           sizeof(states[0]), 
-                                                           state_count,
-                                                           state_stack,
-                                                           state_shape_atom_indices_stack,
-                                                           stack_capacity);
-        
-        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
-        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+        CHECK(false);
     }
-    
-    
     
 } // SUITE(liz_common_internal_test)
 

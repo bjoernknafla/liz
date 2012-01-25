@@ -291,7 +291,7 @@ extern "C" {
      * liz_vm_monitor_node_flag_leave_to_top.
      */
     typedef void (*liz_vm_monitor_func_t)(uintptr_t user_data,
-                                          uint16_t const node_shape_atom_index,
+                                          liz_uint_t const node_shape_atom_index,
                                           liz_uint_t const traversal_mask,
                                           liz_vm_t const *vm,
                                           void const * LIZ_RESTRICT actor_blackboard,
@@ -418,6 +418,9 @@ extern "C" {
     /**
      * Traverses an actor's behavior tree and updates the actor.
      *
+     * @attention Resets vm as a first step - all non-extracted states and
+     *            action requests are lost.
+     *
      * Call liz_vm_extract_and_clear_actor_state afterwards to 
      * Call liz_vm_extract_and_clear_action_requests afterwards to get the 
      * requests.
@@ -437,6 +440,9 @@ extern "C" {
     /**
      * Cancels running immediate actor and creates cancellation requests for its 
      * active deferred actions.
+     *
+     * @attention Resets vm as a first step - all non-extracted states and
+     *            action requests are lost.
      *
      * Call liz_vm_extract_and_clear_actor_state afterwards to 
      * Call liz_vm_extract_and_clear_action_requests afterwards to get the 
@@ -691,7 +697,7 @@ extern "C" {
     LIZ_INLINE static
     void
     liz_vm_monitor_node(liz_vm_monitor_t *monitor,
-                        uint16_t const node_shape_atom_index,
+                        liz_uint_t const node_shape_atom_index,
                         liz_uint_t const traversal_mask,
                         liz_vm_t const *vm,
                         void const * LIZ_RESTRICT actor_blackboard,
@@ -963,6 +969,18 @@ extern "C" {
     
     
     
+    /**
+     * Reorders keys and their associated values which are in a pre-order 
+     * traversal order according to increasing keys.
+     */
+    void
+    liz_vm_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
+                                                          uint16_t * LIZ_RESTRICT keys,
+                                                          size_t const value_size_in_bytes,
+                                                          size_t const value_alignment_in_bytes,
+                                                          liz_int_t const key_value_count,
+                                                          liz_vm_decider_guard_t *decider_guard_stack_buffer,
+                                                          liz_lookaside_stack_t *decider_guard_stack_header);
     
 #if defined(__cplusplus)
 } /* extern "C" */

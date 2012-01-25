@@ -74,20 +74,20 @@ extern "C" {
     
     
     
-#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION 1u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN 0u    
-#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION 2u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN 0u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION 1u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN 0u    
-#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER 1u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN 0u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER 1u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN 0u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER 1u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN 0u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER 2u
-#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER_TWO_CHILDREN 3u
+#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION 1
+#define LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN 0   
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION 2
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN 0
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION 1
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN 0 
+#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER 1
+#define LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN 0
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER 1
+#define LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN 0
+#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER 1
+#define LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN 0
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER 2
+#define LIZ_NODE_SHAPE_ATOM_COUNT_PROBABILITY_DECIDER_TWO_CHILDREN 3
     
     
     /**
@@ -329,6 +329,8 @@ extern "C" {
      * value_reoder_stack must be correctly aligned to store values, otherwise
      * behavios is undefined.
      */
+    /* Refactored to minimize errors when calculating stack addresses, renamed,
+     * and moved to vm.h.
     void
     liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
                                                        uint16_t * LIZ_RESTRICT keys,
@@ -337,7 +339,7 @@ extern "C" {
                                                        void * LIZ_RESTRICT value_reorder_stack,
                                                        uint16_t * LIZ_RESTRICT key_reorder_stack,
                                                        liz_int_t const stack_capacity);
-    
+    */
     
     
     /**

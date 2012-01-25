@@ -49,6 +49,179 @@
 
 SUITE(liz_vm_helpers_test)
 {
+    TEST(sort_decider_states_empty)
+    {
+        liz_int_t const state_count = 0;
+        liz_int_t const stack_capacity = 0;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t const expected_states[state_count] = {};
+        uint16_t const expected_state_shape_atom_indices[state_count] = {};
+        
+        uint16_t states[state_count] = {};
+        uint16_t state_shape_atom_indices[state_count] = {};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
+    
+    TEST(sort_decider_states_single_element)
+    {
+        liz_int_t const state_count = 1;
+        liz_int_t const stack_capacity = 0;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t expected_states[state_count] = {42u};
+        uint16_t expected_state_shape_atom_indices[state_count] = {7u};
+        
+        uint16_t states[state_count] = {42u};
+        uint16_t state_shape_atom_indices[state_count] = {7u};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
+    
+    TEST(sort_decider_states_already_ordered)
+    {
+        liz_int_t const state_count = 3;
+        liz_int_t const stack_capacity = 1;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t expected_states[state_count] = {5u, 4u, 3u};
+        uint16_t expected_state_shape_atom_indices[state_count] = {0u, 1u, 2u};
+        
+        uint16_t states[state_count] = {5u, 4u, 3u};
+        uint16_t state_shape_atom_indices[state_count] = {0u, 1u, 2u};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
+    
+    TEST(sort_decider_states_single_sequence_unordered)
+    {
+        liz_int_t const state_count = 3;
+        liz_int_t const stack_capacity = 2;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t expected_states[state_count] = {103u, 102u, 101u};
+        uint16_t expected_state_shape_atom_indices[state_count] = {7u, 23u, 42u};
+        
+        uint16_t states[state_count] = {101u, 102u, 103u};
+        uint16_t state_shape_atom_indices[state_count] = {42u, 23u, 7u};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
+    
+    TEST(sort_decider_states_single_sequence_unordered_without_first_key_as_last_element)
+    {
+        liz_int_t const state_count = 6;
+        liz_int_t const stack_capacity = 3;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t expected_states[state_count] = {105u, 104u, 103u, 102u, 101u, 100u};
+        uint16_t expected_state_shape_atom_indices[state_count] = {1u, 2u, 3u, 4u, 6u, 7u};
+        
+        uint16_t states[state_count] = {105u, 104u, 102u, 103u, 100u, 101u};
+        uint16_t state_shape_atom_indices[state_count] = {1u, 2u, 4u, 3u, 7u, 6u};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
+    
+    TEST(sort_decider_states_sequences_in_sequence_unordered)
+    {
+        liz_int_t const state_count = 8;
+        liz_int_t const stack_capacity = 3;
+        std::size_t const state_alignment = 2;
+        
+        uint16_t expected_states[state_count] = {107u, 106u, 105u, 104u, 103u, 102u, 101u, 100u};
+        uint16_t expected_state_shape_atom_indices[state_count] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u};
+        
+        uint16_t states[state_count] = {105u, 104u, 106u, 101u, 100u, 102u, 103u, 107u};
+        uint16_t state_shape_atom_indices[state_count] = {2u, 3u, 1u, 6u, 7u, 5u, 4u, 0u};
+        
+        liz_vm_decider_guard_t stack_buffer[stack_capacity] = {};
+        liz_lookaside_stack_t stack_header = liz_lookaside_stack_make(stack_capacity, 0);
+        
+        liz_vm_sort_values_for_keys_from_post_order_traversal(states,
+                                                              state_shape_atom_indices, 
+                                                              sizeof(states[0]),
+                                                              state_alignment,
+                                                              state_count,
+                                                              stack_buffer,
+                                                              &stack_header);
+        
+        CHECK_ARRAY_EQUAL(expected_states, states, state_count);
+        CHECK_ARRAY_EQUAL(expected_state_shape_atom_indices, state_shape_atom_indices, state_count);
+    }
+    
+    
     TEST(replace_an_empty_cancellation_range_with_another_empty_range) 
     {
         liz_vm_cancellation_range_t range = {0u, 0u};
@@ -305,7 +478,7 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0 /* liz_time_t */, 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -341,7 +514,7 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0 /* liz_time_t */, 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -373,7 +546,7 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0 /* liz_time_t */, 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -417,7 +590,7 @@ SUITE(liz_vm_helpers_test)
      NULL,
      proband_blackboard, 
      0, // liz_time_t 
-     &actor,
+     &proband_actor,
      &shape);
      
      CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -460,7 +633,7 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0, // liz_time_t 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -507,7 +680,7 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0, // liz_time_t 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -548,103 +721,12 @@ SUITE(liz_vm_helpers_test)
                                                           NULL,
                                                           proband_blackboard, 
                                                           0, // liz_time_t 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
         CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
     }
-    
-    
-    namespace {
-        
-        struct monitor_log_entry {
-            uint16_t node_shape_atom_index;
-            liz_uint_t traversal_mask;
-            liz_vm_t const *vm;
-            void const* actor_blackboard;
-            liz_time_t time;
-            liz_vm_actor_t const *actor;
-            liz_vm_shape_t const *shape;
-        };
-        
-        
-        bool
-        operator==(monitor_log_entry const& lhs, monitor_log_entry const& rhs)
-        {
-            bool const result = (lhs.node_shape_atom_index == rhs.node_shape_atom_index
-                                 && lhs.traversal_mask == rhs.traversal_mask
-                                 && lhs.vm == rhs.vm
-                                 && lhs.actor_blackboard == rhs.actor_blackboard
-                                 && lhs.time == rhs.time
-                                 && lhs.actor == rhs.actor
-                                 && lhs.shape == rhs.shape);
-            
-            return result;
-        }
-        
-        inline
-        UnitTest::MemoryOutStream& 
-        operator<<(UnitTest::MemoryOutStream& mos, monitor_log_entry const& entry) 
-        {
-            mos << "{node_shape_atom_index: " << entry.node_shape_atom_index;
-            mos << " traversal_mask: " << entry.traversal_mask;
-            mos << " vm: " << entry.vm;
-            mos << " actor_blackboard: " << entry.actor_blackboard;
-            mos << " time: " << entry.time;
-            mos << " actor: " << entry.actor;
-            mos << " shape: " << entry.shape;
-            mos << "}";
-            
-            return mos;
-        }
-        
-        typedef std::vector<monitor_log_entry> monitor_log;
-        
-        
-        inline
-        UnitTest::MemoryOutStream& 
-        operator<<(UnitTest::MemoryOutStream& mos, monitor_log const& log) 
-        {
-            char const* separator = "";
-            mos << "[";
-            for (std::size_t i = 0; i < log.size(); ++i) {
-                mos << separator << log[i];
-                separator = ", ";
-            }
-            mos << "]";
-            
-            
-            return mos;
-        }
-        
-        
-        void monitor_test_func(uintptr_t user_data,
-                               uint16_t const node_shape_atom_index,
-                               liz_uint_t const traversal_mask,
-                               liz_vm_t const *vm,
-                               void const * LIZ_RESTRICT actor_blackboard,
-                               liz_time_t const time,
-                               liz_vm_actor_t const *actor,
-                               liz_vm_shape_t const *shape)
-        {
-            monitor_log* log = reinterpret_cast<monitor_log*>(user_data);
-            
-            monitor_log_entry entry = {
-                node_shape_atom_index,
-                traversal_mask,
-                vm,
-                actor_blackboard,
-                time,
-                actor,
-                shape
-            };
-            
-            log->push_back(entry);
-        }
-        
-    } // anonymous namespace
-    
     
     
     TEST_FIXTURE(liz_vm_test_fixture, monitor_cancel_running_actions_from_current_update_few_states)
@@ -680,30 +762,30 @@ SUITE(liz_vm_helpers_test)
                                       );
         
         
-        monitor_log expected_log;
+        liz_vm_monitor_log expected_log;
         
 #if defined(LIZ_VM_MONITOR_ENABLE)
-        expected_log.push_back((monitor_log_entry) {
+        expected_log.push_back((liz_vm_monitor_log_entry) {
             2,
             liz_vm_monitor_node_flag_enter_from_top | liz_vm_monitor_node_flag_cancel_action,
             proband_vm,
             proband_blackboard,
             0, // liz_time_t
-            &actor,
+            &proband_actor,
             &shape
         });
-        expected_log.push_back((monitor_log_entry) {
+        expected_log.push_back((liz_vm_monitor_log_entry) {
             2,
             liz_vm_monitor_node_flag_leave_to_top | liz_vm_monitor_node_flag_cancel_action,
             proband_vm,
             proband_blackboard,
             0, // liz_time_t
-            &actor,
+            &proband_actor,
             &shape
         });
 #endif
         
-        monitor_log proband_log;
+        liz_vm_monitor_log proband_log;
         
         liz_vm_monitor_t monitor = {
             reinterpret_cast<uintptr_t>(&proband_log),
@@ -714,7 +796,7 @@ SUITE(liz_vm_helpers_test)
                                                           &monitor,
                                                           proband_blackboard, 
                                                           0, // liz_time_t 
-                                                          &actor,
+                                                          &proband_actor,
                                                           &shape);
         
         
@@ -731,7 +813,8 @@ SUITE(liz_vm_helpers_test)
                                    7 // resource_id
                                    );
         
-        push_actor_action_state(0, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                0, // shape_atom_index
                                 liz_execution_state_launch);
         
         create_expected_result_and_proband_vms_for_shape();
@@ -757,7 +840,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         
@@ -774,7 +857,8 @@ SUITE(liz_vm_helpers_test)
                                    7 // resource_id
                                    );
         
-        push_actor_action_state(0, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                0, // shape_atom_index
                                 liz_execution_state_running);
         
         create_expected_result_and_proband_vms_for_shape();
@@ -800,7 +884,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         
@@ -814,7 +898,8 @@ SUITE(liz_vm_helpers_test)
     {
         push_shape_immediate_action(immediate_action_func_index_identity1);
         
-        push_actor_action_state(0, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                0, // shape_atom_index
                                 liz_execution_state_running);
         
         create_expected_result_and_proband_vms_for_shape();
@@ -836,7 +921,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         
@@ -880,7 +965,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -900,7 +985,8 @@ SUITE(liz_vm_helpers_test)
         
         create_expected_result_and_proband_vms_for_shape();
         
-        push_actor_action_state(1, // shape atom index
+        push_actor_action_state(target_select_proband,
+                                1, // shape atom index
                                 liz_execution_state_running);
         
         expected_result_vm->actor_action_state_index = 1;
@@ -921,7 +1007,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -941,9 +1027,11 @@ SUITE(liz_vm_helpers_test)
         
         create_expected_result_and_proband_vms_for_shape();
         
-        push_actor_action_state(1, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                1, // shape_atom_index
                                 liz_execution_state_running);
-        push_actor_action_state(2, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                2, // shape_atom_index
                                 liz_execution_state_running);
         
         expected_result_vm->actor_action_state_index = 2;
@@ -969,7 +1057,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -989,9 +1077,11 @@ SUITE(liz_vm_helpers_test)
         
         create_expected_result_and_proband_vms_for_shape();
         
-        push_actor_action_state(1, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                1, // shape_atom_index
                                 liz_execution_state_running);
-        push_actor_action_state(2, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                2, // shape_atom_index
                                 liz_execution_state_running);
         
         expected_result_vm->actor_action_state_index = 2;
@@ -1015,7 +1105,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -1035,9 +1125,11 @@ SUITE(liz_vm_helpers_test)
         
         create_expected_result_and_proband_vms_for_shape();
         
-        push_actor_action_state(1, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                1, // shape_atom_index
                                 liz_execution_state_running);
-        push_actor_action_state(2, // shape_atom_index
+        push_actor_action_state(target_select_proband,
+                                2, // shape_atom_index
                                 liz_execution_state_running);
         
         expected_result_vm->actor_action_state_index = 1;
@@ -1058,7 +1150,7 @@ SUITE(liz_vm_helpers_test)
                                                                         NULL,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
@@ -1085,10 +1177,12 @@ SUITE(liz_vm_helpers_test)
                                         2,
                                         4);
         
-        push_actor_action_state(1, // shape atom index
+        push_actor_action_state(target_select_proband,
+                                1, // shape atom index
                                 liz_execution_state_running);
         
-        push_actor_action_state(2, // shape atom index
+        push_actor_action_state(target_select_proband,
+                                2, // shape atom index
                                 liz_execution_state_running);
         
         push_vm_action_cancel_request(target_select_expected_result,
@@ -1099,47 +1193,28 @@ SUITE(liz_vm_helpers_test)
         
         
         expected_result_vm->actor_action_state_index = 2;
+
+        push_monitor_log_entry(target_select_expected_result, 
+                               2, 
+                               liz_vm_monitor_node_flag_enter_from_top | liz_vm_monitor_node_flag_cancel_action, 
+                               0);
+        push_monitor_log_entry(target_select_expected_result, 
+                               2, 
+                               liz_vm_monitor_node_flag_leave_to_top | liz_vm_monitor_node_flag_cancel_action, 
+                               0);
         
-        monitor_log expected_log;
         
-#if defined(LIZ_VM_MONITOR_ENABLE)
-        expected_log.push_back((monitor_log_entry) {
-            2,
-            liz_vm_monitor_node_flag_enter_from_top | liz_vm_monitor_node_flag_cancel_action,
-            proband_vm,
-            proband_blackboard,
-            0, // liz_time_t
-            &actor,
-            &shape
-        });
-        expected_log.push_back((monitor_log_entry) {
-            2,
-            liz_vm_monitor_node_flag_leave_to_top | liz_vm_monitor_node_flag_cancel_action,
-            proband_vm,
-            proband_blackboard,
-            0, // liz_time_t
-            &actor,
-            &shape
-        });
-#endif
-        
-        monitor_log proband_log;
-        
-        liz_vm_monitor_t monitor = {
-            reinterpret_cast<uintptr_t>(&proband_log),
-            monitor_test_func
-        };
         
         liz_vm_cancel_launched_and_running_actions_from_previous_update(proband_vm,
-                                                                        &monitor,
+                                                                        monitor,
                                                                         proband_blackboard, 
                                                                         0, // liz_time_t 
-                                                                        &actor,
+                                                                        &proband_actor,
                                                                         &shape);
         
         
         CHECK_EQUAL(expected_result_vm_comparator, proband_vm_comparator);
         CHECK_ARRAY_EQUAL(expected_result_blackboard, proband_blackboard, shape_immediate_action_function_count);
-        CHECK_EQUAL(expected_log, proband_log);
+        CHECK_EQUAL(expected_result_monitor_log, proband_monitor_log);
     }
 }

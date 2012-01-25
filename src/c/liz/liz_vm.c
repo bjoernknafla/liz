@@ -198,11 +198,11 @@ liz_vm_update_actor(liz_vm_t *vm,
 {
     LIZ_ASSERT(liz_vm_fulfills_shape_specification(vm, shape->spec));
     
+    liz_vm_reset(vm);
+    
     if (0u == shape->spec.shape_atom_count) {
         return;
     }
-    
-    liz_vm_reset(vm);
     
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
                                                    actor->header->user_data);
@@ -238,6 +238,10 @@ liz_vm_cancel_actor(liz_vm_t *vm,
                                                    actor->header->user_data);
     
     vm->actor_random_number_seed = actor->header->placeholder_for_random_number_seed;
+    vm->cancellation_range = (liz_vm_cancellation_range_t){
+        0,
+        shape->spec.shape_atom_count
+    };
     vm->cmd = liz_vm_cmd_cleanup;
     
     liz_vm_step(vm,
@@ -299,7 +303,8 @@ liz_vm_extract_action_requests(liz_vm_t const *vm,
                                liz_int_t const external_request_capacity,
                                liz_id_t const actor_id)
 {
-    LIZ_ASSERT(liz_vm_cmd_done == vm->cmd && "Vm update must have been cleaned up and done before extracting action requests.");
+    LIZ_ASSERT(liz_vm_cmd_done == vm->cmd 
+               && "Vm update must have been cleaned up and done before extracting action requests.");
     LIZ_ASSERT(external_request_capacity >= liz_lookaside_double_stack_count_all(&vm->action_request_stack_header));
 
     liz_int_t const request_count = liz_lookaside_double_stack_count_all(&vm->action_request_stack_header);
@@ -661,35 +666,23 @@ liz_vm_step_cleanup(liz_vm_t *vm,
                                                 shape);
     
     // Reorder vm decider states.
-    LIZ_ASSERT(0 == (((uintptr_t)vm->decider_guards) & (LIZ_VM_DECIDER_GUARD_ALIGNMENT - 1)) 
-               && "Invalid assumption that decider guard stack is 16bit aligned.");
-    LIZ_ASSERT(sizeof(*(vm->decider_guards)) >= (sizeof(*(vm->decider_states)) + sizeof(*(vm->decider_state_shape_atom_indices))) 
-               && "Stack elements too small to store a decider state and its shape atom index.");
-    liz_sort_values_for_keys_from_post_order_traversal(vm->decider_states,
-                                                       vm->decider_state_shape_atom_indices,
-                                                       sizeof(*(vm->decider_states)),
-                                                       liz_lookaside_stack_count(&vm->decider_state_stack_header),
-                                                       vm->decider_guards + sizeof(*(vm->decider_states)) * liz_lookaside_stack_count(&vm->decider_state_stack_header),
-                                                       (uint16_t *)(vm->decider_guards),
-                                                       liz_lookaside_stack_capacity(&vm->decider_guard_stack_header));
+    liz_vm_sort_values_for_keys_from_post_order_traversal(vm->decider_states,
+                                                          vm->decider_state_shape_atom_indices,
+                                                          sizeof(*(vm->decider_states)),
+                                                          LIZ_DECIDER_STATE_ALIGNMENT,
+                                                          liz_lookaside_stack_count(&vm->decider_state_stack_header),
+                                                          vm->decider_guards,
+                                                          &vm->decider_guard_stack_header);
     
     // Reorder vm persistent state changes, establish the correct helper stack 
     // alignment.
-    LIZ_ASSERT(0 == (((uintptr_t)vm->decider_guards) & (LIZ_VM_DECIDER_GUARD_ALIGNMENT - 1))
-               && "Invalid assumption that decider guard stack is 16bit aligned.");
-    LIZ_ASSERT(sizeof(*(vm->decider_guards)) >= (sizeof(*(vm->persistent_state_changes)) + sizeof(*(shape->persistent_state_shape_atom_indices)) + (LIZ_PERSISTENT_STATE_ALIGNMENT - LIZ_VM_DECIDER_GUARD_ALIGNMENT)) 
-               && "Stack elements too small to store a persistent state change and its shape atom index.");
-    
-    char *aligned_persistent_state_stack = (char *)vm->decider_guards + sizeof(*(shape->persistent_state_shape_atom_indices)) * liz_lookaside_stack_capacity(&vm->decider_guard_stack_header);
-    aligned_persistent_state_stack += liz_allocation_alignment_offset(aligned_persistent_state_stack, LIZ_PERSISTENT_STATE_ALIGNMENT);
-    
-    liz_sort_values_for_keys_from_post_order_traversal(vm->persistent_state_changes,
-                                                       vm->persistent_state_change_shape_atom_indices, 
-                                                       sizeof(*(vm->persistent_state_changes)),
-                                                       liz_lookaside_stack_count(&vm->persistent_state_change_stack_header),
-                                                       aligned_persistent_state_stack,
-                                                       (uint16_t *)(vm->decider_guards),
-                                                       liz_lookaside_stack_capacity(&vm->decider_guard_stack_header));
+    liz_vm_sort_values_for_keys_from_post_order_traversal(vm->persistent_state_changes,
+                                                          vm->persistent_state_change_shape_atom_indices, 
+                                                          sizeof(*(vm->persistent_state_changes)),
+                                                          LIZ_PERSISTENT_STATE_ALIGNMENT,
+                                                          liz_lookaside_stack_count(&vm->persistent_state_change_stack_header),
+                                                          vm->decider_guards,
+                                                          &vm->decider_guard_stack_header);
     
     // That's it. Action states and action launch requests should be in the
     // correct order while action cancel requests should be in the reversed 
@@ -1600,4 +1593,95 @@ liz_vm_cancel_launched_and_running_actions_from_previous_update(liz_vm_t *vm,
 }
 
 
+
+void
+liz_vm_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
+                                                      uint16_t * LIZ_RESTRICT keys,
+                                                      size_t const value_size_in_bytes,
+                                                      size_t const value_alignment_in_bytes,
+                                                      liz_int_t const key_value_count,
+                                                      liz_vm_decider_guard_t *decider_guard_stack_buffer,
+                                                      liz_lookaside_stack_t *decider_guard_stack_header)
+{
+    LIZ_ASSERT(0 == liz_lookaside_stack_count(decider_guard_stack_header) && "Decider guard stack must not be in use when sorting.");
+    LIZ_ASSERT((0 == ((uintptr_t)decider_guard_stack_buffer & (LIZ_VM_DECIDER_GUARD_ALIGNMENT - 1))) 
+               && "Invalid assumption that decider guard stack is 16bit aligned.");
+    LIZ_ASSERT(LIZ_VM_DECIDER_GUARD_ALIGNMENT >= LIZ_SHAPE_ATOM_INDEX_ALIGNMENT);
+    
+    uint16_t *key_reorder_stack = (uint16_t *)decider_guard_stack_buffer;
+    void *value_reorder_stack = ((char *)decider_guard_stack_buffer) + liz_lookaside_stack_capacity(decider_guard_stack_header) * sizeof(uint16_t);
+    value_reorder_stack = ((char *)value_reorder_stack) + liz_allocation_alignment_offset(value_reorder_stack,
+                                                                                          value_alignment_in_bytes);
+    
+    LIZ_ASSERT(((uintptr_t)(key_reorder_stack + liz_lookaside_stack_capacity(decider_guard_stack_header))) <= ((uintptr_t)(decider_guard_stack_buffer + liz_lookaside_stack_capacity(decider_guard_stack_header))));
+    LIZ_ASSERT(((uintptr_t)(key_reorder_stack + liz_lookaside_stack_capacity(decider_guard_stack_header))) <= ((uintptr_t)value_reorder_stack));
+    LIZ_ASSERT((((uintptr_t)value_reorder_stack) + liz_lookaside_stack_capacity(decider_guard_stack_header) * value_size_in_bytes) <= ((uintptr_t)(decider_guard_stack_buffer + liz_lookaside_stack_capacity(decider_guard_stack_header))));
+               
+    // Copying the decider guard stack header to not affect it unnecessarily.
+    liz_lookaside_stack_t stack_header = *decider_guard_stack_header;
+    
+    liz_int_t kv_read_index = key_value_count - 1;
+    liz_int_t kv_write_index = key_value_count - 1;
+    
+    
+    while (0 <= kv_read_index) {
+        
+        LIZ_ASSERT(kv_read_index <= kv_write_index && "Writing must not overtake reading.");
+        LIZ_ASSERT((0 == liz_lookaside_stack_count(&stack_header) 
+                    || keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&stack_header)]) 
+                   && "Keys must be unique.");
+        
+        if (0 != liz_lookaside_stack_count(&stack_header) 
+            && keys[kv_read_index] < key_reorder_stack[liz_lookaside_stack_top_index(&stack_header)]) {
+            
+            // Move the key and value from the stack in place.
+            keys[kv_write_index] = key_reorder_stack[liz_lookaside_stack_top_index(&stack_header)];
+            liz_memcpy((char *)values + value_size_in_bytes * kv_write_index,
+                       (char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&stack_header),
+                       value_size_in_bytes);
+            
+            liz_lookaside_stack_pop(&stack_header);
+            
+            --kv_write_index;
+        } else if (!liz_lookaside_stack_is_full(&stack_header)){
+            // Push the key and its value onto the stack.
+            liz_lookaside_stack_push(&stack_header);
+            
+            key_reorder_stack[liz_lookaside_stack_top_index(&stack_header)] = keys[kv_read_index];
+            liz_memcpy((char *)value_reorder_stack + value_size_in_bytes * liz_lookaside_stack_top_index(&stack_header), 
+                       (char *)values + value_size_in_bytes * kv_read_index, 
+                       value_size_in_bytes);
+            
+            --kv_read_index;
+        }  else {
+            // Reached for leaves when the stack that only covers inner nodes
+            // aka branches is full. Leaves are always ordered correctly in 
+            // regard to other leaves. Only post-order emitted decider values
+            // need reordering in regard to other keys and values.
+            keys[kv_write_index] = keys[kv_read_index];
+            
+            // read and write indices are equal for an already sorted list, 
+            // therefore use memmove instead of memcpy.
+            liz_memmove((char *)values + value_size_in_bytes * kv_write_index,
+                        (char *)values + value_size_in_bytes * kv_read_index,
+                        value_size_in_bytes);
+            
+            --kv_read_index;
+            --kv_write_index;
+        } 
+    }
+    
+    // All keys and values read, write what's left on the stack back.
+    LIZ_ASSERT(kv_write_index + 1 == liz_lookaside_stack_count(&stack_header));
+    liz_memcpy(keys, 
+               key_reorder_stack, 
+               sizeof(keys[0]) * liz_lookaside_stack_count(&stack_header));
+    liz_memcpy(values, 
+               value_reorder_stack,
+               value_size_in_bytes * liz_lookaside_stack_count(&stack_header));
+    // liz_lookaside_stack_clear(&stack_header);
+    
+    LIZ_ASSERT(0 == liz_lookaside_stack_count(decider_guard_stack_header) 
+               && "No side effects must remain from sorting on the decider guard stack.");
+}
 

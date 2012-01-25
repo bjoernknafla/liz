@@ -48,7 +48,7 @@ liz_shape_atom_stream_add_immediate_action(liz_shape_atom_t *atoms,
                                            uint16_t immediate_action_function_index)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN <= capacity);
     
     liz_int_t i = *index;
     
@@ -58,7 +58,7 @@ liz_shape_atom_stream_add_immediate_action(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_IMMEDIATE_ACTION_TWO_CHILDREN);
     
     *index = i;
 }
@@ -73,7 +73,7 @@ liz_shape_atom_stream_add_deferred_action(liz_shape_atom_t *atoms,
                                           uint16_t resource_id)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN <= capacity);
     
     liz_int_t i = *index;
     
@@ -87,7 +87,7 @@ liz_shape_atom_stream_add_deferred_action(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_DEFERRED_ACTION_TWO_CHILDREN);
     
     *index = i;
 }
@@ -100,7 +100,7 @@ liz_shape_atom_stream_add_persistent_action(liz_shape_atom_t *atoms,
                                             liz_int_t capacity)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN <= capacity);
     
     liz_int_t i = *index;
     
@@ -111,7 +111,7 @@ liz_shape_atom_stream_add_persistent_action(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_PERSISTENT_ACTION_TWO_CHILDREN);
     
     *index = i;
 }
@@ -125,7 +125,7 @@ liz_shape_atom_stream_add_sequence_decider(liz_shape_atom_t *atoms,
                                            uint16_t end_offset)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN <= capacity);
     LIZ_ASSERT(*index + end_offset <= capacity);
     LIZ_ASSERT(1u < end_offset);
     
@@ -137,7 +137,7 @@ liz_shape_atom_stream_add_sequence_decider(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_SEQUENCE_DECIDER_TWO_CHILDREN);
     
     *index = i;
 }
@@ -151,7 +151,7 @@ liz_shape_atom_stream_add_dynamic_priority_decider(liz_shape_atom_t *atoms,
                                                    uint16_t end_offset)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN <= capacity);
     LIZ_ASSERT(*index + end_offset <= capacity);
     LIZ_ASSERT(1u < end_offset);
     
@@ -163,7 +163,7 @@ liz_shape_atom_stream_add_dynamic_priority_decider(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_DYNAMIC_PRIORITY_DECIDER_TWO_CHILDREN);
     
     *index = i;
 }
@@ -177,7 +177,7 @@ liz_shape_atom_stream_add_concurrent_decider(liz_shape_atom_t *atoms,
                                              uint16_t end_offset)
 {
     LIZ_ASSERT(LIZ_COUNT_MAX >= capacity);
-    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN <= capacity);
+    LIZ_ASSERT(*index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN <= capacity);
     LIZ_ASSERT(*index + end_offset <= capacity);
     LIZ_ASSERT(1u < end_offset);
     
@@ -189,7 +189,7 @@ liz_shape_atom_stream_add_concurrent_decider(liz_shape_atom_t *atoms,
     
     ++i;
     
-    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0u * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN);
+    LIZ_ASSERT(i == *index + LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER + 0 * LIZ_NODE_SHAPE_ATOM_COUNT_CONCURRENT_DECIDER_TWO_CHILDREN);
     
     *index = i;
 }
@@ -321,6 +321,10 @@ liz_sort_decider_states_for_indices(uint16_t * LIZ_RESTRICT destination_states,
 */
 
 
+
+
+
+/*
 void
 liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
                                                    uint16_t * LIZ_RESTRICT keys,
@@ -365,7 +369,7 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
             
             --kv_read_index;
             
-            LIZ_ASSERT(keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)] && "Keys must be unique.");
+            LIZ_ASSERT((0 > kv_read_index || keys[kv_read_index] != key_reorder_stack[liz_lookaside_stack_top_index(&reorder_stack)]) && "Keys must be unique.");
         }  else {
             // Reached for leaves when the stack that only covers inner nodes
             // aka branches is full. Leaves are always ordered correctly in 
@@ -393,7 +397,7 @@ liz_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values,
                value_reorder_stack,
                value_size_in_bytes * liz_lookaside_stack_count(&reorder_stack));
 }
-
+*/
 
 
 bool
