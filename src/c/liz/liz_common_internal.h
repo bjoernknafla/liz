@@ -321,7 +321,7 @@ extern "C" {
     
     
     /**
-     * Reorders keys and their associated values which are in a pre-order 
+     * Reorders keys and their associated values which are in a post-order 
      * traversal order according to increasing keys.
      *
      * stack_capacity must be at least as large as the tree whose traversal

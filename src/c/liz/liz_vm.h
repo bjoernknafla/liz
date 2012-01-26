@@ -70,6 +70,16 @@
  * TODO: @todo The moment I add the actor clip and liz system always check 
  *             state changes updates passed in from the outside to have valid
  *             values.
+ *
+ * TODO: @todo Add an error flag to the monitor system and call monitor on 
+ *             errors, too.
+ *
+ * TODO: @todo Get rid of the many function parameters which take up registers 
+ *             or stack space and instead collect them in an execution context
+ *             or vm session struct. At last do this for the internal functions.
+ *
+ * TODO: @todo Branch and consolidate all shape atom or guard type switch 
+ *             statements into a single one to keep call-stacks shallow.
  */
 
 #ifndef LIZ_liz_vm_H
@@ -970,7 +980,7 @@ extern "C" {
     
     
     /**
-     * Reorders keys and their associated values which are in a pre-order 
+     * Reorders keys and their associated values which are in a post-order 
      * traversal order according to increasing keys.
      */
     void

@@ -205,9 +205,10 @@ liz_shape_specification_merge_max(liz_shape_specification_t lhs,
     result.shape_atom_count = (uint16_t)liz_max(lhs.shape_atom_count, rhs.shape_atom_count);
     result.immediate_action_function_count = (uint16_t)liz_max(lhs.immediate_action_function_count, rhs.immediate_action_function_count);
     result.persistent_state_count = (uint16_t)liz_max(lhs.persistent_state_count, rhs.persistent_state_count);
-    result.decider_guard_capacity = (uint16_t)liz_max(lhs.decider_guard_capacity, rhs.decider_guard_capacity);
     result.decider_state_capacity = (uint16_t)liz_max(lhs.decider_state_capacity, rhs.decider_state_capacity);
     result.action_state_capacity = (uint16_t)liz_max(lhs.action_state_capacity, rhs.action_state_capacity);
+    result.persistent_state_change_capacity = (uint16_t)liz_max(lhs.persistent_state_change_capacity, rhs.persistent_state_change_capacity);
+    result.decider_guard_capacity = (uint16_t)liz_max(lhs.decider_guard_capacity, rhs.decider_guard_capacity);
     result.action_request_capacity = (uint16_t)liz_max(lhs.action_request_capacity, rhs.action_request_capacity);
     
     return result;

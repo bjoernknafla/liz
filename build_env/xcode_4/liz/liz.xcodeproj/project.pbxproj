@@ -48,6 +48,8 @@
 		325FF85714CB12D500AF1A41 /* liz_vm_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 325FF85614CB12D500AF1A41 /* liz_vm_test.cpp */; };
 		325FF85814CB12D500AF1A41 /* liz_vm_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 325FF85614CB12D500AF1A41 /* liz_vm_test.cpp */; };
 		327B979914991BC100EFAA12 /* liz_common_internal_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 327B979814991BC100EFAA12 /* liz_common_internal_test.cpp */; };
+		32DC1FB914D091DC0039A659 /* liz_test_helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32DC1FB814D091DC0039A659 /* liz_test_helpers.cpp */; };
+		32DC1FBA14D091DC0039A659 /* liz_test_helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32DC1FB814D091DC0039A659 /* liz_test_helpers.cpp */; };
 		32F7742C14925BD700328CB7 /* liz_common.c in Sources */ = {isa = PBXBuildFile; fileRef = 32F7742B14925BD700328CB7 /* liz_common.c */; };
 		32F7742F1492A4E400328CB7 /* liz_lookaside_stack.h in Headers */ = {isa = PBXBuildFile; fileRef = 32F7742D1492A4E400328CB7 /* liz_lookaside_stack.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		32FC33FB14C82DDA001C15BE /* libunittestpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 325D2D601490D9E2008EBB88 /* libunittestpp.a */; };
@@ -138,6 +140,7 @@
 		325FF85614CB12D500AF1A41 /* liz_vm_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = liz_vm_test.cpp; sourceTree = "<group>"; };
 		327B979814991BC100EFAA12 /* liz_common_internal_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = liz_common_internal_test.cpp; sourceTree = "<group>"; };
 		32CB527014A0E73100FD680C /* liz_test_helpers.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = liz_test_helpers.h; sourceTree = "<group>"; };
+		32DC1FB814D091DC0039A659 /* liz_test_helpers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = liz_test_helpers.cpp; sourceTree = "<group>"; };
 		32F7742B14925BD700328CB7 /* liz_common.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = liz_common.c; sourceTree = "<group>"; };
 		32F7742D1492A4E400328CB7 /* liz_lookaside_stack.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = liz_lookaside_stack.h; sourceTree = "<group>"; };
 		32FC33E814C82B39001C15BE /* liz_test_with_monitoring */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = liz_test_with_monitoring; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -289,6 +292,7 @@
 			isa = PBXGroup;
 			children = (
 				32CB527014A0E73100FD680C /* liz_test_helpers.h */,
+				32DC1FB814D091DC0039A659 /* liz_test_helpers.cpp */,
 				325D2D6614910C1E008EBB88 /* liz_test_main.cpp */,
 				3226227F1493EC230073CFB7 /* liz_platform_types_test.cpp */,
 				322622821493EC230073CFB7 /* liz_allocator_test.cpp */,
@@ -468,6 +472,7 @@
 				3218F63D149FDB7D00FCBC3A /* liz_common.c in Sources */,
 				327B979914991BC100EFAA12 /* liz_common_internal_test.cpp in Sources */,
 				325FF85714CB12D500AF1A41 /* liz_vm_test.cpp in Sources */,
+				32DC1FB914D091DC0039A659 /* liz_test_helpers.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -486,6 +491,7 @@
 				32FC340114C82DFE001C15BE /* liz_common_internal_test.cpp in Sources */,
 				32FC340214C82DFE001C15BE /* liz_vm_helpers_test.cpp in Sources */,
 				325FF85814CB12D500AF1A41 /* liz_vm_test.cpp in Sources */,
+				32DC1FBA14D091DC0039A659 /* liz_test_helpers.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
