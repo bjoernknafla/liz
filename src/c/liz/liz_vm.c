@@ -298,6 +298,14 @@ liz_vm_extract_actor_state(liz_vm_t const *vm,
 
 
 liz_int_t
+liz_vm_action_request_count(liz_vm_t const *vm)
+{
+    return liz_lookaside_double_stack_count_all(&vm->action_request_stack_header);
+}
+
+
+
+liz_int_t
 liz_vm_extract_action_requests(liz_vm_t const *vm,
                                liz_action_request_t *external_requests,
                                liz_int_t const external_request_capacity,
@@ -313,35 +321,40 @@ liz_vm_extract_action_requests(liz_vm_t const *vm,
     // Extract cancellation requests.
     LIZ_ASSERT(liz_lookaside_double_stack_side_high == LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL
                && "Invalid assumption that cancellation requests are stored at the high side of the stack.");
-    liz_int_t const cancel_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
-    for (liz_int_t i = liz_lookaside_double_stack_capacity(&vm->action_request_stack_header);
-         i >= cancel_top_index; 
-         --i) {
-
-        external_requests[external_index++] = (liz_action_request_t){
-            actor_id,
-            vm->action_requests[i].action_id,
-            vm->action_requests[i].resource_id,
-            vm->action_requests[i].shape_atom_index,
-            liz_action_request_type_cancel
-        };
+    
+    if (0 != liz_lookaside_double_stack_count(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL)) {
+        liz_int_t const cancel_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_CANCEL);
+        for (liz_int_t i = liz_lookaside_double_stack_capacity(&vm->action_request_stack_header);
+             i >= cancel_top_index; 
+             --i) {
+            
+            external_requests[external_index++] = (liz_action_request_t){
+                actor_id,
+                vm->action_requests[i].action_id,
+                vm->action_requests[i].resource_id,
+                vm->action_requests[i].shape_atom_index,
+                liz_action_request_type_cancel
+            };
+        }
     }
     
     // Extract launch requests.
     LIZ_ASSERT(liz_lookaside_double_stack_side_low == LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH
                && "Invalid assumption that cancellation requests are stored at the low side of the stack.");
-    liz_int_t const launch_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
-    for (liz_int_t i = 0; i <= launch_top_index; ++i) {
-        
-        external_requests[external_index++] = (liz_action_request_t){
-            actor_id,
-            vm->action_requests[i].action_id,
-            vm->action_requests[i].resource_id,
-            vm->action_requests[i].shape_atom_index,
-            liz_action_request_type_launch
-        };
-    }
     
+    if (0 != liz_lookaside_double_stack_count(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH)) {
+        liz_int_t const launch_top_index = liz_lookaside_double_stack_top_index(&vm->action_request_stack_header, LIZ_VM_ACTION_REQUEST_STACK_SIDE_LAUNCH);
+        for (liz_int_t i = 0; i <= launch_top_index; ++i) {
+            
+            external_requests[external_index++] = (liz_action_request_t){
+                actor_id,
+                vm->action_requests[i].action_id,
+                vm->action_requests[i].resource_id,
+                vm->action_requests[i].shape_atom_index,
+                liz_action_request_type_launch
+            };
+        }
+    }
     // liz_lookaside_double_stack_clear(&vm->action_request_stack_header);
     
     return request_count;
@@ -1679,6 +1692,10 @@ liz_vm_sort_values_for_keys_from_post_order_traversal(void * LIZ_RESTRICT values
     liz_memcpy(values, 
                value_reorder_stack,
                value_size_in_bytes * liz_lookaside_stack_count(&stack_header));
+    
+    // Not necessary because decider_guard_stack_header is not used directly
+    // so no side effects make its count unequal to 0.
+    //
     // liz_lookaside_stack_clear(&stack_header);
     
     LIZ_ASSERT(0 == liz_lookaside_stack_count(decider_guard_stack_header) 

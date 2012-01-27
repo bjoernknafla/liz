@@ -40,6 +40,7 @@
 
 #include <cassert>
 #include <vector>
+#include <set>
 
 #include <liz/liz_common.h>
 #include <liz/liz_common_internal.h>
@@ -2370,7 +2371,7 @@ SUITE(liz_vm_test)
     }
     
     
-    TEST_FIXTURE(liz_vm_test_fixture,extract_capacity_sized_actor_state)
+    TEST_FIXTURE(liz_vm_test_fixture, extract_capacity_sized_actor_state)
     {
         push_shape_concurrent_decider(5);
         push_shape_persistent_action();
@@ -2398,33 +2399,200 @@ SUITE(liz_vm_test)
     }
     
     
-    TEST(extract_empty_requests)
+    
+    TEST_FIXTURE(liz_vm_test_fixture, extract_empty_requests)
     {
-        CHECK(false);
+        push_shape_immediate_action(immediate_action_func_index_success3);
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_id_t const actor_id = 5;
+        liz_int_t const request_capacity = 3;
+        liz_action_request_t expected_result[request_capacity] = {};
+        liz_action_request_t proband[request_capacity] = {};
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &proband_actor,
+                            &shape);
+        
+        liz_int_t const expected_result_extract_count = 0;
+        liz_int_t const extract_count = liz_vm_extract_action_requests(proband_vm,
+                                                                       proband, 
+                                                                       request_capacity, actor_id);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> expected_result_set(&expected_result[0], &expected_result[expected_result_extract_count]);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> proband_set(&proband[0], &proband[extract_count]);
+        
+        CHECK_EQUAL(expected_result_extract_count, extract_count);
     }
     
     
-    TEST(extract_action_launch_requests)
+    TEST_FIXTURE(liz_vm_test_fixture, extract_action_launch_requests)
     {
-        CHECK(false);
+        push_shape_concurrent_decider(6);
+        {
+            push_shape_deferred_action(11, 1);
+            push_shape_immediate_action(immediate_action_func_index_success3);
+            push_shape_deferred_action(13, 3);
+        }
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &proband_actor,
+                            &shape);
+        
+        liz_id_t const actor_id = 5;
+        liz_int_t const request_capacity = 3;
+        liz_action_request_t expected_result[request_capacity] = {
+            {
+                actor_id,
+                11,
+                1,
+                1,
+                liz_action_request_type_launch
+            },
+            {
+                actor_id,
+                13,
+                3,
+                3,
+                liz_action_request_type_launch
+            }
+        };
+        liz_action_request_t proband[request_capacity] = {};
+        
+        liz_int_t const expected_result_extract_count = 2;
+        liz_int_t const extract_count = liz_vm_extract_action_requests(proband_vm,
+                                                                       proband, 
+                                                                       request_capacity, actor_id);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> expected_result_set(&expected_result[0], &expected_result[expected_result_extract_count]);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> proband_set(&proband[0], &proband[extract_count]);
+        
+        CHECK_EQUAL(expected_result_extract_count, extract_count);
     }
     
     
-    TEST(extract_action_cancel_requests)
+    TEST_FIXTURE(liz_vm_test_fixture, extract_action_cancel_requests)
     {
-        CHECK(false);
+        push_shape_concurrent_decider(6);
+        {
+            push_shape_deferred_action(11, 1);
+            push_shape_immediate_action(immediate_action_func_index_fail4);
+            push_shape_deferred_action(13, 3);
+        }
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(target_select_proband, 4, liz_execution_state_running);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &proband_actor,
+                            &shape);
+        
+        liz_id_t const actor_id = 5;
+        liz_int_t const request_capacity = 3;
+        liz_action_request_t expected_result[request_capacity] = {
+            {
+                actor_id,
+                13,
+                3,
+                4,
+                liz_action_request_type_cancel
+            }
+        };
+        liz_action_request_t proband[request_capacity] = {};
+        
+        liz_int_t const expected_result_extract_count = 1;
+        liz_int_t const extract_count = liz_vm_extract_action_requests(proband_vm,
+                                                                       proband, 
+                                                                       request_capacity, actor_id);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> expected_result_set(&expected_result[0], &expected_result[expected_result_extract_count]);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> proband_set(&proband[0], &proband[extract_count]);
+        
+        CHECK_EQUAL(expected_result_extract_count, extract_count);
     }
     
     
-    TEST(extract_action_requests)
+    TEST_FIXTURE(liz_vm_test_fixture, extract_full_capacity_action_requests)
     {
-        CHECK(false);
-    }
-    
-    
-    TEST(extract_full_capacity_action_requests)
-    {
-        CHECK(false);
+        push_shape_dynamic_priority_decider(8);
+        {
+            push_shape_deferred_action(11, 1);
+            push_shape_concurrent_decider(5);
+            {
+                push_shape_deferred_action(12, 2);
+                push_shape_deferred_action(13, 3);
+            }
+        }
+        
+        create_expected_result_and_proband_vms_for_shape();
+        
+        push_actor_action_state(target_select_proband, 4, liz_execution_state_running);
+        push_actor_action_state(target_select_proband, 6, liz_execution_state_running);
+        
+        liz_vm_update_actor(proband_vm,
+                            monitor_null,
+                            user_data_lookup_context_null,
+                            idenity_user_data_lookup_func,
+                            update_time_zero,
+                            &proband_actor,
+                            &shape);
+        
+        liz_id_t const actor_id = 5;
+        liz_int_t const request_capacity = 3;
+        liz_action_request_t expected_result[request_capacity] = {
+            {
+                actor_id,
+                11,
+                1,
+                1,
+                liz_action_request_type_launch
+            },
+            {
+                actor_id,
+                12,
+                2,
+                4,
+                liz_action_request_type_cancel
+            },
+            {
+                actor_id,
+                13,
+                3,
+                6,
+                liz_action_request_type_cancel
+            }
+        };
+        liz_action_request_t proband[request_capacity] = {};
+        
+        liz_int_t const expected_result_extract_count = 3;
+        liz_int_t const extract_count = liz_vm_extract_action_requests(proband_vm,
+                                                                       proband, 
+                                                                       request_capacity, actor_id);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> expected_result_set(&expected_result[0], &expected_result[expected_result_extract_count]);
+        
+        std::set<liz_action_request_t, liz_action_request_compare> proband_set(&proband[0], &proband[extract_count]);
+        
+        CHECK_EQUAL(expected_result_extract_count, extract_count);
     }
     
 } // SUITE(liz_vm_test)

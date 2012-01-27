@@ -2002,6 +2002,11 @@ liz_vm_test_fixture::push_monitor_log_entry(liz_vm_test_fixture::target_select c
                                             liz_uint_t const monitor_mask,
                                             liz_time_t const time)
 {
+    (void)target_log;
+    (void)shape_atom_index;
+    (void)monitor_mask;
+    (void)time;
+    
 #if defined(LIZ_VM_MONITOR_ENABLE)
     if (target_select_expected_result == target_log
         || target_select_both == target_log) {

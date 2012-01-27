@@ -45,6 +45,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <vector>
+#include <functional>
 
 #include <unittestpp.h>
 
@@ -235,6 +236,32 @@ public:
     liz_vm_t const* vm_;
     liz_shape_atom_t const* shape_atoms_;
     liz_int_t shape_atom_count_;
+};
+
+
+
+struct liz_action_request_compare : std::binary_function<liz_action_request_t, liz_action_request_t, bool> {
+    result_type operator()(first_argument_type const& lhs, 
+                           second_argument_type const& rhs) const
+    {
+        if (lhs.type < rhs.type) {
+            return true;
+        }
+        
+        if (lhs.actor_id < rhs.actor_id) {
+            return true;
+        }
+        
+        if (lhs.shape_atom_index < rhs.shape_atom_index) {
+            return true;
+        }
+        
+        if (lhs.parameter < rhs.parameter) {
+            return true;
+        }
+        
+        return false;
+    }
 };
 
 

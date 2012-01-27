@@ -482,6 +482,15 @@ extern "C" {
                                liz_vm_shape_t const *shape);
     
     
+    
+    /**
+     * Returns the number of extractable action launch and cancel requests.
+     */
+    liz_int_t
+    liz_vm_action_request_count(liz_vm_t const *vm);
+    
+    
+    
     /**
      * Copies the action launch and cancel requests of the last update from vm
      * to external_requests and returns the number of copied requests.
