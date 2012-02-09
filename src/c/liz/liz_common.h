@@ -29,6 +29,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file
+ *
+ * Shared data structures and functions for liz users.
+ *
+ * TODO: @todo Decide if to only use platform-independent fixed sized data types
+ *             in structures that might be stored in files. Currently 32/64 bit
+ *             and alignment of types makes stored types only usable at runtime
+ *             but prevent portable storage of the binary blobs of actor clips.
+ *             See http://www.viva64.com/en/l/0021/ and 
+ *             http://www.viva64.com/en/b/0009/ and
+ *             http://www.wambold.com/Martin/writings/alignof.html .
+ *             Alignment can get under control by only using an algnment-
+ *             guaranteeing allocator and adapt all structs to it. This is not a 
+ *             solution for the platform-specific type sizes though.
+ */
+
 #ifndef LIZ_liz_common_H
 #define LIZ_liz_common_H
 
@@ -82,7 +99,7 @@ extern "C" {
      *
      * TODO: @todo Change the moment the random number generator is done.
      */
-    typedef liz_int_t liz_random_number_seed_t;
+    typedef int32_t liz_random_number_seed_t;
     
     
     

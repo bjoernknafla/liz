@@ -394,6 +394,8 @@ extern "C" {
     /**
      * Returns the memory size in bytes necessary to store a vm capable of
      * working on actors adhering to the shape specification spec.
+     *
+     * TODO: @todo Decide if to rename to liz_vm_sizeof.
      */
     size_t
     liz_vm_memory_size_requirement(liz_shape_specification_t spec);
@@ -475,6 +477,8 @@ extern "C" {
      * Replaces actor's state with the state aggregated in vm.
      *
      * If the state in vm doesn't fit actor, then behavior is undefined.
+     *
+     * TODO: @todo Decide if to rename to liz_vm_get_actor_state.
      */
     void
     liz_vm_extract_actor_state(liz_vm_t const *vm,
@@ -499,6 +503,8 @@ extern "C" {
      *
      * TODO: @todo Add a way to just copy the launch or cancel requests and ways
      *             to query the different request counts.
+     *
+     * TODO: @todo Decide if to rename to liz_vm_get_action_requests.
      */
     liz_int_t
     liz_vm_extract_action_requests(liz_vm_t const *vm,

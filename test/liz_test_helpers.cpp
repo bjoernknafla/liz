@@ -268,7 +268,7 @@ liz_vm_actor_equals(liz_vm_actor const& lhs,
     
     bool result = (// lhs.header->user_data == rhs.header->user_data
                    // && 
-                   lhs.header->placeholder_for_random_number_seed == rhs.header->placeholder_for_random_number_seed
+                   lhs.header->random_number_seed == rhs.header->random_number_seed
                    && lhs.header->actor_id == rhs.header->actor_id
                    && lhs.header->decider_state_count == rhs.header->decider_state_count
                    && lhs.header->action_state_count == rhs.header->action_state_count
@@ -665,7 +665,7 @@ operator<<(UnitTest::MemoryOutStream& mos, liz_vm_monitor_node_flag_t const flag
     if (liz_vm_monitor_node_flag_error & flag) {
         mos << pre_seperator;
         mos << "liz_vm_monitor_node_flag_error";
-        pre_seperator = "|";
+        // pre_seperator = "|";
     }
     
     return mos;
@@ -868,7 +868,7 @@ operator<<(UnitTest::MemoryOutStream& mos, liz_actor_header_t const& actor_heade
 {
     mos << "{"  << LIZ_VM_PRINT_FIELD_SEPARATOR;
     mos << " user_data: " << actor_header.user_data  << LIZ_VM_PRINT_FIELD_SEPARATOR;
-    mos << " placeholder_for_random_number_seed: " << actor_header.placeholder_for_random_number_seed << LIZ_VM_PRINT_FIELD_SEPARATOR;
+    mos << " random_number_seed: " << actor_header.random_number_seed << LIZ_VM_PRINT_FIELD_SEPARATOR;
     mos << " actor_id: " << actor_header.actor_id << LIZ_VM_PRINT_FIELD_SEPARATOR;
     mos << " decider_state_count: " << actor_header.decider_state_count << LIZ_VM_PRINT_FIELD_SEPARATOR;
     mos << " action_state_count: " << actor_header.action_state_count << LIZ_VM_PRINT_FIELD_SEPARATOR;
@@ -1386,14 +1386,14 @@ liz_vm_test_fixture::liz_vm_test_fixture()
     shape.spec.immediate_action_function_count = shape_immediate_action_function_count;
     
     expected_result_actor_header.user_data = reinterpret_cast<uintptr_t>(expected_result_blackboard);
-    expected_result_actor_header.placeholder_for_random_number_seed = 0;
+    expected_result_actor_header.random_number_seed = 0;
     expected_result_actor_header.actor_id = 0;
     expected_result_actor_header.decider_state_count = 0;
     expected_result_actor_header.action_state_count = 0;
     expected_result_actor.header = &expected_result_actor_header;
     
     proband_actor_header.user_data = reinterpret_cast<uintptr_t>(proband_blackboard);
-    proband_actor_header.placeholder_for_random_number_seed = 0;
+    proband_actor_header.random_number_seed = 0;
     proband_actor_header.actor_id = 0;
     proband_actor_header.decider_state_count = 0;
     proband_actor_header.action_state_count = 0;

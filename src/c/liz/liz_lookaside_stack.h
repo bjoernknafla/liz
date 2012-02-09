@@ -97,7 +97,8 @@ extern "C" {
     bool
     liz_lookaside_stack_is_valid(liz_lookaside_stack_t const *stack)
     {
-        return stack->count <= stack->capacity;
+        return (stack->count >= 0 
+                && stack->count <= stack->capacity);
     }
 
     

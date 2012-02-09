@@ -108,6 +108,11 @@ liz_vm_create(liz_shape_specification_t const spec,
         return NULL;
     }
     
+    // Initialize memory to zero as one step to enable memcmp on vm.
+    // Uncommented because it would need to be called for each reset otherwise
+    // unzeroed last states will affect byte comparisons.
+    // liz_memset(vm, 0, vm_size);
+    
     // Calculate aligned state addresses.
     char *ptr = (char *)vm + sizeof(liz_vm_t);
     ptr += liz_allocation_alignment_offset(ptr, LIZ_SHAPE_ATOM_INDEX_ALIGNMENT);
@@ -207,7 +212,7 @@ liz_vm_update_actor(liz_vm_t *vm,
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
                                                    actor->header->user_data);
 
-    vm->actor_random_number_seed = actor->header->placeholder_for_random_number_seed;
+    vm->actor_random_number_seed = actor->header->random_number_seed;
     
     while (liz_vm_is_running(vm)) {
         liz_vm_step(vm,
@@ -237,7 +242,7 @@ liz_vm_cancel_actor(liz_vm_t *vm,
     void *actor_blackboard = user_data_lookup_func(user_data_lookup_context,
                                                    actor->header->user_data);
     
-    vm->actor_random_number_seed = actor->header->placeholder_for_random_number_seed;
+    vm->actor_random_number_seed = actor->header->random_number_seed;
     vm->cancellation_range = (liz_vm_cancellation_range_t){
         0,
         shape->spec.shape_atom_count
@@ -263,7 +268,7 @@ liz_vm_extract_actor_state(liz_vm_t const *vm,
     LIZ_ASSERT(liz_vm_cmd_done == vm->cmd
                && "Vm update must have been cleaned up and done before transmitting states to actor.");
     
-    target_actor->header->placeholder_for_random_number_seed = vm->actor_random_number_seed;
+    target_actor->header->random_number_seed = vm->actor_random_number_seed;
     target_actor->header->decider_state_count = liz_lookaside_stack_count(&vm->decider_guard_stack_header);
     target_actor->header->action_state_count = liz_lookaside_stack_count(&vm->action_state_stack_header);
     

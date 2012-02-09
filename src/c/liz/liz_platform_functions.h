@@ -71,7 +71,6 @@ extern "C" {
     }
     
     
-    
     LIZ_INLINE static
     void*
     liz_memmove(void *destination,
@@ -90,6 +89,38 @@ extern "C" {
     {
         return memcpy(destination, source, bytes_to_copy_count);
     }
+    
+    
+    LIZ_INLINE static
+    void*
+    liz_calloc(size_t element_count, 
+               size_t element_size)
+    {
+        return calloc(element_count, element_size);
+    }
+    
+    
+    LIZ_INLINE static
+    void*
+    liz_memset(void *destination,
+               int value_for_destination_bytes,
+               size_t destination_byte_count)
+    {
+        return memset(destination, 
+                      value_for_destination_bytes, 
+                      destination_byte_count);
+    }
+    
+    
+    LIZ_INLINE static
+    int
+    liz_memcmp(void const *buffer0, 
+               void const *buffer1,
+               size_t buffer_byte_count)
+    {
+        return memcmp(buffer0, buffer1, buffer_byte_count);
+    }
+    
     
     
 #if defined(__cplusplus)

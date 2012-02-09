@@ -175,10 +175,10 @@ extern "C" {
     
     
     typedef struct liz_actor_clip_header {
-        uintptr_t user_data;
-        size_t capacity;
-        size_t count;
-        size_t actor_size;
+        uint64_t user_data;
+        uint32_t capacity;
+        uint32_t count;
+        uint32_t actor_size;
         liz_id_t clip_id;
         liz_id_t shape_id;
     } liz_actor_clip_header_t;
@@ -192,8 +192,8 @@ extern "C" {
      *             decider.
      */
     typedef struct liz_actor_header {
-        uintptr_t user_data;
-        liz_int_t placeholder_for_random_number_seed;
+        uint64_t user_data;
+        liz_random_number_seed_t random_number_seed;
         liz_id_t actor_id;
         uint16_t decider_state_count;
         uint16_t action_state_count;
